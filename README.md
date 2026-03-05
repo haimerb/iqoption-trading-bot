@@ -24,36 +24,10 @@ Bot de trading automatizado completo para IQ Option, con backend Node.js/Express
 
 ## Arquitectura
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          FRONTEND (React)                        │
-│  Dashboard · Strategies · Orders · History · Logs · Settings    │
-│                      Vite + TailwindCSS                          │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTP REST + Socket.IO
-┌────────────────────────────▼────────────────────────────────────┐
-│                     BACKEND (Node.js/Express)                    │
-│                                                                  │
-│  Auth ── Account ── Orders ── Strategies ── MarketData ── Bot   │
-│                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌─────────────┐  │
-│  │ Risk Mgr │  │ Strategy │  │ Order Exec │  │ Market Data │  │
-│  │ Module   │  │ Manager  │  │ Module     │  │ Module      │  │
-│  └──────────┘  └──────────┘  └────────────┘  └─────────────┘  │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              IQ Option Connection (WebSocket)             │  │
-│  │         wss://iqoption.com/echo/websocket                 │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  Bull Queues (Redis)  ·  Winston Logs  ·  Swagger UI            │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-             ┌─────────────┴──────────┐
-             │                        │
-         MongoDB                    Redis
-    (users, history)         (sessions, queues)
-```
+
+
+<img width="1408" height="768" alt="comp-bot" src="https://github.com/user-attachments/assets/60fab4b3-6b6d-4dcd-b535-9a248df7cf8c" />
+
 
 ### Flujo de una señal de trading
 
