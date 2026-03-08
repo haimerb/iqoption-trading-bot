@@ -1,108 +1,129 @@
-import { useQuery } from '@tanstack/react-query'
-import { historyAPI } from '../services/api'
-import { useBotStore } from '../store'
-import { History, TrendingUp, TrendingDown, Trophy, Target, DollarSign } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+
+import React, { useState } from 'react';
+import {
+  Box, Button, Typography, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, TablePagination,
+  Grid, TextField, FormControl, InputLabel, Select, MenuItem
+} from '@mui/material';
+import { TrendingUp, TrendingDown } from '@mui/icons-material';
+
+// Datos de ejemplo para el historial
+const historyData = Array.from({ length: 100 }, (_, i) => ({
+  id: `trade_${12345 + i}`,
+  closeDate: new Date(Date.now() - i * 3600000).toISOString(),
+  asset: ['EUR/USD', 'GBP/JPY', 'BTC/USD', 'ETH/USD'][i % 4],
+  direction: i % 3 === 0 ? 'put' : 'call',
+  amount: 10 + (i % 10),
+  result: (Math.random() - 0.4) * (10 + (i % 10)),
+  strategy: ['MACD Crossover', 'RSI Over-Under', 'Momentum Scalp'][i % 3]
+}));
 
 export default function HistoryPage() {
-  const { orderHistory: localHistory } = useBotStore()
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const { data: histData } = useQuery({
-    queryKey: ['history'],
-    queryFn: () => historyAPI.getHistory({ limit: 200 })
-  })
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
 
-  const { data: statsData } = useQuery({
-    queryKey: ['historyStats'],
-    queryFn: () => historyAPI.getStats()
-  })
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
 
-  const history = histData?.data || localHistory
-  const stats = statsData?.data?.closed || {}
+  const paginatedData = historyData.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Historial de Operaciones</h1>
-        <p className="text-gray-400 text-sm mt-1">Análisis y registro de todas tus operaciones</p>
-      </div>
+    <Box>
+      <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 4 }}>
+        Historial de Operaciones
+      </Typography>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Operaciones', value: stats.total || 0, icon: History, color: 'text-blue-400' },
-          { label: 'Win Rate', value: stats.winRate || '0%', icon: Target, color: 'text-purple-400' },
-          { label: 'Total Profit', value: `$${(stats.totalProfit || 0).toFixed(2)}`, icon: Trophy, color: 'text-green-400' },
-          { label: 'PnL Neto', value: `$${(stats.totalPnl || 0).toFixed(2)}`, icon: DollarSign, color: (stats.totalPnl || 0) >= 0 ? 'text-green-400' : 'text-red-400' }
-        ].map(s => (
-          <div key={s.label} className="card">
-            <div className="flex items-center gap-2 mb-2">
-              <s.icon size={16} className={s.color} />
-              <span className="text-xs text-gray-500">{s.label}</span>
-            </div>
-            <div className={`text-2xl font-bold font-mono ${s.color}`}>{s.value}</div>
-          </div>
-        ))}
-      </div>
+      {/* Filtros */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={4}>
+            <TextField
+              label="Fecha de Inicio"
+              type="date"
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              label="Fecha de Fin"
+              type="date"
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <FormControl fullWidth>
+              <InputLabel>Activo</InputLabel>
+              <Select label="Activo" defaultValue="all">
+                <MenuItem value="all">Todos</MenuItem>
+                <MenuItem value="EUR/USD">EUR/USD</MenuItem>
+                <MenuItem value="GBP/JPY">GBP/JPY</MenuItem>
+                <MenuItem value="BTC/USD">BTC/USD</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <Button variant="contained" fullWidth sx={{ height: '100%' }}>Buscar</Button>
+          </Grid>
+        </Grid>
+      </Paper>
 
-      {/* Tabla de historial */}
-      <div className="card">
-        <h2 className="font-semibold mb-4">Últimas Operaciones</h2>
-
-        {history.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <History size={40} className="mx-auto mb-3 opacity-40" />
-            <p>No hay operaciones en el historial</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-800">
-                  {['Fecha/Hora', 'Dirección', 'Monto', 'Apertura', 'Cierre', 'PnL', 'Resultado'].map(h => (
-                    <th key={h} className="text-left text-gray-500 font-medium pb-2 pr-4">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((order, idx) => (
-                  <tr key={order.id || idx} className="border-b border-gray-800/30 hover:bg-gray-800/20">
-                    <td className="py-2 pr-4 text-xs text-gray-400 font-mono">
-                      {order.closedAt ? format(parseISO(order.closedAt), 'dd/MM HH:mm') : '-'}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span className={`flex items-center gap-1 w-fit px-2 py-0.5 rounded text-xs font-bold ${
-                        order.direction === 'call'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {order.direction === 'call' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {order.direction?.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 font-mono">${order.amount}</td>
-                    <td className="py-2 pr-4 font-mono text-gray-300">{order.openQuote || '-'}</td>
-                    <td className="py-2 pr-4 font-mono text-gray-300">{order.closeQuote || '-'}</td>
-                    <td className={`py-2 pr-4 font-mono font-bold ${(order.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {(order.pnl || 0) >= 0 ? '+' : ''}${(order.pnl || 0).toFixed(2)}
-                    </td>
-                    <td className="py-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        (order.pnl || 0) > 0
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {(order.pnl || 0) > 0 ? 'WIN' : 'LOSS'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+      {/* Tabla de Historial */}
+      <Paper>
+        <TableContainer>
+          <Table sx={{ minWidth: 650 }} aria-label="history table">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 'bold' }}>Fecha Cierre</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Activo</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Tipo</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }} align="right">Monto ($)</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }} align="right">Resultado ($)</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Estrategia</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {paginatedData.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>{new Date(row.closeDate).toLocaleString()}</TableCell>
+                  <TableCell>{row.asset}</TableCell>
+                  <TableCell>
+                    <Chip
+                      icon={row.direction === 'call' ? <TrendingUp /> : <TrendingDown />}
+                      label={row.direction.toUpperCase()}
+                      color={row.direction === 'call' ? 'success' : 'error'}
+                      variant="outlined"
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell align="right">${row.amount.toFixed(2)}</TableCell>
+                  <TableCell align="right" sx={{ color: row.result >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
+                    {row.result >= 0 ? `+${row.result.toFixed(2)}` : row.result.toFixed(2)}
+                  </TableCell>
+                  <TableCell>{row.strategy}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 100]}
+          component="div"
+          count={historyData.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          labelRowsPerPage="Filas por página:"
+        />
+      </Paper>
+    </Box>
+  );
 }

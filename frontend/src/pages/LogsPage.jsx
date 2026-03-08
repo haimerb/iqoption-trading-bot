@@ -1,162 +1,113 @@
-import { useRef, useEffect, useState } from 'react'
-import { useBotStore } from '../store'
-import { ScrollText, Trash2, Filter, Download } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
-import clsx from 'clsx'
 
-const LOG_LEVELS = ['all', 'info', 'warn', 'error', 'success']
-const CATEGORIES = ['all', 'SYSTEM', 'ORDER', 'STRATEGY', 'TRADING_AUDIT', 'SECURITY_AUDIT']
+import React, { useRef, useEffect } from 'react';
+import {
+  Box, Button, Typography, Paper, Grid,
+  Chip, ButtonGroup, Switch, FormControlLabel
+} from '@mui/material';
+import { Delete, Download } from '@mui/icons-material';
 
-const levelColors = {
-  info: 'text-blue-400',
-  warn: 'text-yellow-400',
-  error: 'text-red-400',
-  success: 'text-green-400'
-}
+// Datos de ejemplo para los logs
+const mockLogs = [
+  { level: 'info', category: 'SYSTEM', message: 'Bot iniciado correctamente.' },
+  { level: 'info', category: 'CONNECTION', message: 'Conectado a la API de IQ Option.' },
+  { level: 'success', category: 'STRATEGY', message: 'Estrategia "MACD Crossover" iniciada para EUR/USD.' },
+  { level: 'info', category: 'ORDER', message: 'Abriendo orden CALL para EUR/USD por $10.' },
+  { level: 'warn', category: 'RISK_MGMT', message: 'El activo GBP/JPY tiene una volatilidad alta.' },
+  { level: 'success', category: 'ORDER', message: 'Orden #123 cerrada con ganancia de $8.70.' },
+  { level: 'info', category: 'ORDER', message: 'Abriendo orden PUT para GBP/JPY por $15.' },
+  { level: 'error', category: 'ORDER', message: 'Fallo al cerrar la orden #124: Tiempo de expiración no alcanzado.' },
+  { level: 'success', category: 'ORDER', message: 'Orden #125 cerrada con pérdida de -$15.00.' },
+];
 
-const levelBg = {
-  info: 'bg-blue-500/10',
-  warn: 'bg-yellow-500/10',
-  error: 'bg-red-500/10',
-  success: 'bg-green-500/10'
-}
+const getLogLevelColor = (level) => {
+  switch (level) {
+    case 'error': return 'error.main';
+    case 'warn': return 'warning.main';
+    case 'success': return 'success.main';
+    case 'info':
+    default:
+      return 'info.main';
+  }
+};
+
+const LogLine = ({ log }) => (
+    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: '70px' }}>
+            {new Date().toLocaleTimeString()}
+        </Typography>
+        <Chip
+            label={log.level.toUpperCase()}
+            size="small"
+            sx={{
+                bgcolor: getLogLevelColor(log.level),
+                color: '#fff',
+                width: '70px'
+            }}
+        />
+        <Typography variant="body2" sx={{ fontFamily: 'monospace', flex: 1 }}>
+            [{log.category}] {log.message}
+        </Typography>
+    </Box>
+);
 
 export default function LogsPage() {
-  const { logs, clearLogs } = useBotStore()
-  const [filterLevel, setFilterLevel] = useState('all')
-  const [filterCategory, setFilterCategory] = useState('all')
-  const [autoScroll, setAutoScroll] = useState(true)
-  const [search, setSearch] = useState('')
-  const logsEndRef = useRef(null)
+    const logContainerRef = useRef(null);
 
-  useEffect(() => {
-    if (autoScroll && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [logs, autoScroll])
-
-  const filteredLogs = logs
-    .filter(log => filterLevel === 'all' || log.level === filterLevel)
-    .filter(log => filterCategory === 'all' || log.category === filterCategory)
-    .filter(log => !search || log.message.toLowerCase().includes(search.toLowerCase()))
-
-  const handleExportLogs = () => {
-    const content = filteredLogs
-      .map(l => `[${l.timestamp}] [${l.level?.toUpperCase()}] [${l.category}] ${l.message}`)
-      .join('\n')
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `bot-logs-${new Date().toISOString().split('T')[0]}.txt`
-    a.click()
-  }
+    useEffect(() => {
+        // Auto-scroll al final
+        if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+    }, [mockLogs]);
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Logs en Tiempo Real</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {filteredLogs.length} de {logs.length} entradas
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleExportLogs} className="btn-ghost flex items-center gap-2 text-sm">
-            <Download size={16} /> Exportar
-          </button>
-          <button onClick={clearLogs} className="btn-danger flex items-center gap-2 text-sm">
-            <Trash2 size={16} /> Limpiar
-          </button>
-        </div>
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
+      <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 2 }}>
+        Logs del Sistema
+      </Typography>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          placeholder="Buscar en logs..."
-          className="input max-w-xs text-sm"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+            <Grid item>
+                <ButtonGroup variant="outlined" size="small">
+                    <Button>Todos</Button>
+                    <Button>Info</Button>
+                    <Button>Warn</Button>
+                    <Button>Error</Button>
+                </ButtonGroup>
+            </Grid>
+            <Grid item sx={{ flexGrow: 1 }}>
+                <FormControlLabel control={<Switch defaultChecked />} label="Auto-scroll" />
+            </Grid>
+            <Grid item>
+                <Button variant="outlined" startIcon={<Download />} size="small">Exportar</Button>
+            </Grid>
+            <Grid item>
+                <Button variant="outlined" color="error" startIcon={<Delete />} size="small">Limpiar Logs</Button>
+            </Grid>
+        </Grid>
+      </Paper>
 
-        <div className="flex items-center gap-1">
-          <Filter size={14} className="text-gray-500" />
-          {LOG_LEVELS.map(level => (
-            <button
-              key={level}
-              onClick={() => setFilterLevel(level)}
-              className={clsx(
-                'text-xs px-2 py-1 rounded transition-colors font-mono',
-                filterLevel === level
-                  ? level === 'all'
-                    ? 'bg-gray-600 text-white'
-                    : `${levelBg[level]} ${levelColors[level]} border border-current/30`
-                  : 'text-gray-500 hover:text-gray-300'
-              )}
-            >
-              {level.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        <select
-          className="input max-w-xs text-sm"
-          value={filterCategory}
-          onChange={e => setFilterCategory(e.target.value)}
-        >
-          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-
-        <label className="flex items-center gap-2 text-sm text-gray-400 ml-auto">
-          <input
-            type="checkbox"
-            checked={autoScroll}
-            onChange={e => setAutoScroll(e.target.checked)}
-            className="accent-blue-500"
-          />
-          Auto-scroll
-        </label>
-      </div>
-
-      {/* Panel de logs */}
-      <div className="flex-1 card font-mono text-xs overflow-y-auto max-h-[calc(100vh-280px)] bg-gray-950 border-gray-800">
-        {filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-gray-600">
-            <div className="text-center">
-              <ScrollText size={32} className="mx-auto mb-2 opacity-40" />
-              <p>Sin logs para mostrar</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-0.5 p-2">
-            {filteredLogs.map((log) => (
-              <div
-                key={log.id}
-                className={clsx(
-                  'flex gap-3 px-2 py-1 rounded hover:bg-gray-800/50',
-                  levelBg[log.level]
-                )}
-              >
-                <span className="text-gray-600 flex-shrink-0 w-14 text-right">
-                  {log.timestamp ? format(parseISO(log.timestamp), 'HH:mm:ss') : ''}
-                </span>
-                <span className={clsx('flex-shrink-0 w-8 font-bold uppercase', levelColors[log.level])}>
-                  {log.level?.slice(0, 3) || 'inf'}
-                </span>
-                <span className="text-gray-500 flex-shrink-0 w-20 truncate">
-                  [{log.category || 'SYS'}]
-                </span>
-                <span className={clsx('flex-1', levelColors[log.level] || 'text-gray-300')}>
-                  {log.message}
-                </span>
-              </div>
+      <Paper
+        ref={logContainerRef}
+        sx={{
+          flexGrow: 1,
+          p: 2,
+          overflowY: 'auto',
+          bgcolor: 'background.default',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {mockLogs.map((log, index) => (
+                <LogLine key={index} log={log} />
             ))}
-            <div ref={logsEndRef} />
-          </div>
-        )}
-      </div>
-    </div>
-  )
+             {mockLogs.map((log, index) => (
+                <LogLine key={index+100} log={log} />
+            ))}
+        </Box>
+      </Paper>
+    </Box>
+  );
 }
