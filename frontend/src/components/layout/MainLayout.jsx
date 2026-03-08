@@ -1,172 +1,186 @@
-import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useAuthStore, useBotStore } from '../../store'
-import { authAPI } from '../../services/api'
-import { disconnectSocket } from '../../services/socket'
-import toast from 'react-hot-toast'
+
+import React, { useState } from 'react';
+import { Outlet, Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, TrendingUp, ShoppingCart, History,
-  ScrollText, Settings, LogOut, Wifi, WifiOff, AlertTriangle,
-  Bell, ChevronRight
-} from 'lucide-react'
-import { botAPI } from '../../services/api'
+  AppBar, Box, CssBaseline, Drawer, List, ListItem, ListItemButton,
+  ListItemIcon, ListItemText, Toolbar, Typography, IconButton,
+  Tooltip, Avatar, Menu, MenuItem, Divider, Chip
+} from '@mui/material';
+import {
+  Dashboard, Insights, ShoppingCart, History, BugReport,
+  Settings, Logout, AccountBalanceWallet, SignalCellularAlt, SignalCellularOff
+} from '@mui/icons-material';
+
+const drawerWidth = 240;
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/strategies', icon: TrendingUp, label: 'Estrategias' },
-  { to: '/orders', icon: ShoppingCart, label: 'Órdenes' },
-  { to: '/history', icon: History, label: 'Historial' },
-  { to: '/logs', icon: ScrollText, label: 'Logs' },
-  { to: '/settings', icon: Settings, label: 'Configuración' }
-]
+  { to: '/', icon: <Dashboard />, label: 'Dashboard' },
+  { to: '/strategies', icon: <Insights />, label: 'Estrategias' },
+  { to: '/orders', icon: <ShoppingCart />, label: 'Órdenes Abiertas' },
+  { to: '/history', icon: <History />, label: 'Historial' },
+  { to: '/logs', icon: <BugReport />, label: 'Logs' },
+];
 
-export default function MainLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const { logout, user } = useAuthStore()
-  const { isConnected, iqBalance, iqCurrency, alerts, stats } = useBotStore()
-  const navigate = useNavigate()
-  const unreadAlerts = alerts.filter(a => !a.readAt).length
+const bottomNavItems = [
+  { to: '/settings', icon: <Settings />, label: 'Ajustes' },
+];
 
-  const handleLogout = async () => {
-    try {
-      await authAPI.logout()
-    } catch {}
-    disconnectSocket()
-    logout()
-    navigate('/login')
-    toast.success('Sesión cerrada')
-  }
+// Componente para integrar React Router con MUI List
+const ListItemLink = (props) => {
+  const { icon, primary, to } = props;
+  const location = useLocation();
+  const isSelected = location.pathname === to;
 
-  const handleEmergencyStop = async () => {
-    if (!confirm('¿Detener TODAS las estrategias activas?')) return
-    try {
-      await botAPI.emergencyStop()
-      toast.success('Parada de emergencia ejecutada')
-    } catch (err) {
-      toast.error('Error en parada de emergencia')
-    }
-  }
+  const CustomLink = React.useMemo(
+    () =>
+      React.forwardRef(function Link(linkProps, ref) {
+        return <RouterLink ref={ref} to={to} {...linkProps} />;
+      }),
+    [to],
+  );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-950">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-16'} bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-300`}>
-        {/* Logo */}
-        <div className="p-4 flex items-center gap-3 border-b border-gray-800">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <TrendingUp size={18} />
-          </div>
-          {sidebarOpen && (
-            <div>
-              <div className="font-bold text-sm">IQ Bot</div>
-              <div className="text-xs text-gray-500">Trading System</div>
-            </div>
-          )}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="ml-auto text-gray-500 hover:text-gray-300"
-          >
-            <ChevronRight size={16} className={`transition-transform ${sidebarOpen ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
+    <li>
+      <ListItemButton component={CustomLink} selected={isSelected}>
+        {icon && <ListItemIcon>{icon}</ListItemIcon>}
+        <ListItemText primary={primary} />
+      </ListItemButton>
+    </li>
+  );
+};
 
-        {/* Balance */}
-        {sidebarOpen && (
-          <div className="mx-3 mt-3 p-3 bg-gray-800 rounded-lg">
-            <div className="text-xs text-gray-500 mb-1">Balance</div>
-            <div className={`font-mono font-bold text-lg ${iqBalance > 0 ? 'text-green-400' : 'text-gray-400'}`}>
-              {iqCurrency} {iqBalance.toFixed(2)}
-            </div>
-            <div className="flex items-center gap-1 mt-1">
-              {isConnected
-                ? <><Wifi size={12} className="text-green-400 live-indicator" /><span className="text-xs text-green-400">Conectado</span></>
-                : <><WifiOff size={12} className="text-red-400" /><span className="text-xs text-red-400">Desconectado</span></>
-              }
-            </div>
-          </div>
-        )}
 
-        {/* Navegación */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm
-                ${isActive
-                  ? 'bg-blue-600/20 text-blue-400 font-medium border border-blue-500/30'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              <Icon size={18} className="flex-shrink-0" />
-              {sidebarOpen && <span>{label}</span>}
-            </NavLink>
-          ))}
-        </nav>
+export default function MainLayout() {
+  const [anchorElUser, setAnchorElUser] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-        {/* Botones de acción */}
-        <div className="p-3 border-t border-gray-800 space-y-2">
-          {sidebarOpen && (
-            <button
-              onClick={handleEmergencyStop}
-              className="w-full flex items-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-sm transition-colors border border-red-500/30"
-            >
-              <AlertTriangle size={16} />
-              <span>Parada Emergencia</span>
-            </button>
-          )}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg text-sm transition-colors"
-          >
-            <LogOut size={16} />
-            {sidebarOpen && <span>Cerrar sesión</span>}
-          </button>
-        </div>
-      </aside>
+  // Mock data - reemplazar con el estado real de la aplicación
+  const isConnected = true;
+  const userEmail = "user@example.com";
+  const accountBalance = "10,523.50";
+  const accountCurrency = "USD";
 
-      {/* Contenido principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
-          <div className="text-sm text-gray-400">
-            Bienvenido, <span className="text-gray-200 font-medium">{user?.email}</span>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Estadísticas rápidas */}
-            <div className="flex items-center gap-4 text-xs font-mono">
-              <span className="text-gray-500">
-                W: <span className="text-green-400">{stats.wins}</span>
-              </span>
-              <span className="text-gray-500">
-                L: <span className="text-red-400">{stats.losses}</span>
-              </span>
-              <span className="text-gray-500">
-                PnL: <span className={stats.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
-                  ${stats.totalPnl.toFixed(2)}
-                </span>
-              </span>
-            </div>
-            {/* Alertas */}
-            <button className="relative text-gray-400 hover:text-gray-200">
-              <Bell size={18} />
-              {unreadAlerts > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
-                  {unreadAlerts}
-                </span>
-              )}
-            </button>
-          </div>
-        </header>
+  const handleOpenUserMenu = (event) => {
+    setAnchorElUser(event.currentTarget);
+  };
 
-        {/* Página */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
-        </main>
-      </div>
+  const handleCloseUserMenu = () => {
+    setAnchorElUser(null);
+  };
+  
+  const handleLogout = () => {
+    handleCloseUserMenu();
+    // Lógica de logout aquí
+    console.log("Cerrando sesión...");
+    navigate('/login'); // Simula redirección a login
+  };
+
+  const getTitle = () => {
+    const allNavItems = [...navItems, ...bottomNavItems];
+    const currentNavItem = allNavItems.find(item => item.to === location.pathname);
+    return currentNavItem ? currentNavItem.label : "Trading Bot";
+  }
+
+  const drawerContent = (
+    <div>
+      <Toolbar sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant="h6" noWrap component="div">
+          Trading Bot
+        </Typography>
+      </Toolbar>
+      <Divider />
+      <Box sx={{ p: 2, mt: 1 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>Balance</Typography>
+        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{`$${accountBalance}`}</Typography>
+        <Chip
+            icon={isConnected ? <SignalCellularAlt /> : <SignalCellularOff />}
+            label={isConnected ? "Conectado" : "Desconectado"}
+            color={isConnected ? "success" : "error"}
+            size="small"
+            sx={{ mt: 1 }}
+        />
+      </Box>
+      <List>
+        {navItems.map((item) => (
+          <ListItemLink key={item.to} to={item.to} primary={item.label} icon={item.icon} />
+        ))}
+      </List>
+      <Box sx={{ flexGrow: 1 }} />
+      <Divider />
+      <List>
+        {bottomNavItems.map((item) => (
+          <ListItemLink key={item.to} to={item.to} primary={item.label} icon={item.icon} />
+        ))}
+        <ListItemButton onClick={handleLogout}>
+            <ListItemIcon><Logout /></ListItemIcon>
+            <ListItemText primary="Cerrar sesión" />
+        </ListItemButton>
+      </List>
     </div>
-  )
+  );
+
+  return (
+    <Box sx={{ display: 'flex' }}>
+      <CssBaseline />
+      <AppBar
+        position="fixed"
+        sx={{ width: `calc(100% - ${drawerWidth}px)`, ml: `${drawerWidth}px` }}
+      >
+        <Toolbar>
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+            {getTitle()}
+          </Typography>
+          <Box sx={{ flexGrow: 0 }}>
+            <Tooltip title="Abrir menú de usuario">
+              <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
+                <Avatar alt={userEmail} src="/static/images/avatar/2.jpg" />
+              </IconButton>
+            </Tooltip>
+            <Menu
+              sx={{ mt: '45px' }}
+              id="menu-appbar"
+              anchorEl={anchorElUser}
+              anchorOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              open={Boolean(anchorElUser)}
+              onClose={handleCloseUserMenu}
+            >
+                <MenuItem onClick={handleLogout}>
+                  <Typography textAlign="center">Cerrar sesión</Typography>
+                </MenuItem>
+            </Menu>
+          </Box>
+        </Toolbar>
+      </AppBar>
+      <Drawer
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+          },
+        }}
+        variant="permanent"
+        anchor="left"
+      >
+        {drawerContent}
+      </Drawer>
+      <Box
+        component="main"
+        sx={{ flexGrow: 1, bgcolor: 'background.default', p: 3 }}
+      >
+        <Toolbar />
+        <Outlet />
+      </Box>
+    </Box>
+  );
 }
