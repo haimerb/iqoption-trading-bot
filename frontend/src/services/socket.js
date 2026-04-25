@@ -1,14 +1,11 @@
 import { io } from 'socket.io-client'
-import { useBotStore } from '../store'
+import { useBotStore, useMLStore } from '../store'
 import toast from 'react-hot-toast'
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '/'
 
 let socket = null
 
-/**
- * Inicializar conexión Socket.IO
- */
 export function initSocket(token) {
   if (socket?.connected) return socket
 
@@ -21,6 +18,7 @@ export function initSocket(token) {
   })
 
   const store = useBotStore.getState()
+  const mlStore = useMLStore.getState()
 
   socket.on('connect', () => {
     console.log('[Socket] Conectado:', socket.id)
@@ -39,21 +37,13 @@ export function initSocket(token) {
     store.addLog({ level: 'error', message: `❌ Error de socket: ${err.message}`, category: 'SYSTEM' })
   })
 
-  // ====================================
-  // Eventos del servidor
-  // ====================================
-
-  // Precio actualizado
   socket.on('market:price', (data) => {
     store.updatePrice(data.activeId, data)
   })
 
-  // Vela actualizada
   socket.on('market:candle', (candle) => {
-    // Manejar en componentes específicos si es necesario
   })
 
-  // Señal de estrategia
   socket.on('strategy:signal', (signal) => {
     store.addLog({
       level: 'info',
@@ -66,7 +56,34 @@ export function initSocket(token) {
     })
   })
 
-  // Orden abierta
+  socket.on('ml:prediction', (data) => {
+    console.log('[ML] Predicción:', data)
+    mlStore.setPrediction(data.asset, data)
+    mlStore.addToHistory(data)
+    
+    if (data.direction && data.confidence >= mlStore.config.minConfidence) {
+      store.addLog({
+        level: 'info',
+        message: `🤖 IA predice ${data.direction.toUpperCase()} en ${data.asset} (${(data.confidence * 100).toFixed(0)}%)`,
+        category: 'ML'
+      })
+      toast(`🤖 IA: ${data.direction.toUpperCase()} en ${data.asset}`, {
+        icon: data.direction === 'call' ? '📈' : '📉'
+      })
+    }
+  })
+
+  socket.on('ml:trained', (data) => {
+    console.log('[ML] Entrenado:', data)
+    store.addLog({
+      level: 'success',
+      message: `🧠 Modelo entrenado para ${data.asset} (${(data.accuracy * 100).toFixed(0)}%)`,
+      category: 'ML',
+      data
+    })
+    toast.success(`Modelo entrenado: ${data.asset}`)
+  })
+
   socket.on('order:opened', (order) => {
     store.addPosition(order)
     store.addLog({
@@ -78,7 +95,6 @@ export function initSocket(token) {
     toast.success(`Orden abierta: ${order.direction?.toUpperCase()} $${order.amount}`)
   })
 
-  // Posición cerrada
   socket.on('order:closed', (position) => {
     store.removePosition(position.id)
     store.addToHistory(position)
@@ -95,12 +111,9 @@ export function initSocket(token) {
     }
   })
 
-  // Posición actualizada
   socket.on('order:updated', (position) => {
-    // Actualizar estado de posición abierta
   })
 
-  // Error de estrategia
   socket.on('strategy:error', (data) => {
     store.addLog({
       level: 'error',
@@ -117,7 +130,6 @@ export function initSocket(token) {
     toast.error(`Estrategia error: ${data.error}`)
   })
 
-  // Bot status
   socket.on('bot:status', (status) => {
     if (status.connection?.sessionData?.balance) {
       store.setBalance(
@@ -146,6 +158,18 @@ export function subscribeToAsset(activeId, size = 60) {
 export function unsubscribeFromAsset(activeId, size = 60) {
   if (socket?.connected) {
     socket.emit('unsubscribe:asset', { activeId, size })
+  }
+}
+
+export function subscribeToML(asset, timeframe = '1m') {
+  if (socket?.connected) {
+    socket.emit('ml:subscribe', { asset, timeframe })
+  }
+}
+
+export function unsubscribeFromML(asset) {
+  if (socket?.connected) {
+    socket.emit('ml:unsubscribe', { asset })
   }
 }
 
