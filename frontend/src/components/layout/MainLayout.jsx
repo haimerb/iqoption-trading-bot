@@ -8,13 +8,14 @@ import {
 } from '@mui/material';
 import {
   Dashboard, Insights, ShoppingCart, History, BugReport,
-  Settings, Logout, AccountBalanceWallet, SignalCellularAlt, SignalCellularOff
+  Settings, Logout, AccountBalanceWallet, SignalCellularAlt, SignalCellularOff, Psychology
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
 
 const navItems = [
   { to: '/', icon: <Dashboard />, label: 'Dashboard' },
+  { to: '/ml', icon: <Psychology />, label: 'IA Predictions' },
   { to: '/strategies', icon: <Insights />, label: 'Estrategias' },
   { to: '/orders', icon: <ShoppingCart />, label: 'Órdenes Abiertas' },
   { to: '/history', icon: <History />, label: 'Historial' },

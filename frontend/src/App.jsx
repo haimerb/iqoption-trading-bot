@@ -16,6 +16,7 @@ import OrdersPage from './pages/OrdersPage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import LogsPage from './pages/LogsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import MLPage from './pages/MLPage.jsx';
 
 // Layout
 import MainLayout from './components/layout/MainLayout.jsx';
@@ -56,6 +57,7 @@ export default function App() {
           </PrivateRoute>
         }>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/ml" element={<MLPage />} />
           <Route path="/strategies" element={<StrategiesPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/history" element={<HistoryPage />} />

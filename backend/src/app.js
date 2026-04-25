@@ -23,6 +23,7 @@ const orderRoutes = require('./routes/order.routes');
 const strategyRoutes = require('./routes/strategy.routes');
 const historyRoutes = require('./routes/history.routes');
 const botRoutes = require('./routes/bot.routes');
+const mlRoutes = require('./routes/ml.routes');
 
 const app = express();
 
@@ -91,6 +92,7 @@ app.use(`${API_PREFIX}/orders`, orderRoutes);
 app.use(`${API_PREFIX}/strategies`, strategyRoutes);
 app.use(`${API_PREFIX}/history`, historyRoutes);
 app.use(`${API_PREFIX}/bot`, botRoutes);
+app.use(`${API_PREFIX}/ml`, mlRoutes);
 
 // ================================
 // Manejo de errores

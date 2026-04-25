@@ -8,6 +8,7 @@ const orderExecution = require('../order-execution/orderExecutionModule');
 const strategyManager = require('../strategies/StrategyManager');
 
 let io = null;
+let mlWs = null;
 
 /**
  * Inicializar Socket.IO y configurar namespaces y eventos
@@ -57,6 +58,27 @@ function initSocket(httpServer) {
     // Desuscribirse
     socket.on('unsubscribe:asset', ({ activeId, size = 60 }) => {
       socket.leave(`asset_${activeId}_${size}`);
+    });
+
+    // ML: Suscribirse a predicciones de un activo
+    socket.on('ml:subscribe', ({ asset, timeframe }) => {
+      if (mlWs) {
+        mlWs.subscribeToAsset(socket, asset, timeframe);
+      }
+    });
+
+    // ML: Desuscribirse de predicciones
+    socket.on('ml:unsubscribe', ({ asset }) => {
+      if (mlWs) {
+        mlWs.unsubscribeFromAsset(socket, asset);
+      }
+    });
+
+    // ML: Solicitar predicción
+    socket.on('ml:predict', ({ asset, timeframe }) => {
+      if (mlWs) {
+        mlWs.predict(socket, { asset, timeframe });
+      }
     });
 
     // Solicitar estado actual del bot
@@ -112,6 +134,20 @@ function initSocket(httpServer) {
   return io;
 }
 
+function initMLWebSocket(mlService) {
+  try {
+    const MLWebSocketService = require('../ml-ws/mlWebSocketService');
+    mlWs = new MLWebSocketService({
+      mlServiceUrl: process.env.ML_SERVICE_URL || 'http://localhost:8000',
+      predictInterval: parseInt(process.env.ML_PREDICT_INTERVAL) || 60000
+    });
+    mlWs.initialize(io);
+    logger.info('ML WebSocket service inicializado');
+  } catch (err) {
+    logger.warn('ML WebSocket service no disponible:', err.message);
+  }
+}
+
 function getIO() {
   if (!io) throw new Error('Socket.IO no inicializado');
   return io;
@@ -131,4 +167,4 @@ function getBotStatus() {
   };
 }
 
-module.exports = { initSocket, getIO, emitToUser };
+module.exports = { initSocket, initMLWebSocket, getIO, emitToUser };
