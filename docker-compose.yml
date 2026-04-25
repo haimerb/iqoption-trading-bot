@@ -52,6 +52,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ml-service:
+        condition: service_started
     env_file:
       - ./backend/.env
     environment:
@@ -59,6 +61,7 @@ services:
       MONGODB_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-changeme}@mongodb:27017/iqbot?authSource=admin
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      ML_SERVICE_URL: http://ml-service:8000
     volumes:
       - backend_logs:/app/logs
     ports:
@@ -77,8 +80,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        VITE_API_URL: http://localhost:3000/api/v1
     container_name: iqbot-frontend
     restart: unless-stopped
     depends_on:
@@ -89,12 +90,35 @@ services:
     networks:
       - iqbot-network
 
+  # ─────────────────────────── ML Service ──────────────────────────
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: iqbot-ml-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_DIR: /app/models
+    volumes:
+      - ml_models:/app/models
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - iqbot-network
+
 volumes:
   mongodb_data:
     driver: local
   redis_data:
     driver: local
   backend_logs:
+    driver: local
+  ml_models:
     driver: local
 
 networks:
