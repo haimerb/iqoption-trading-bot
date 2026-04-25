@@ -37,7 +37,8 @@
     "swagger-ui-express": "^5.0.0",
     "swagger-jsdoc": "^6.2.8",
     "compression": "^1.7.4",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "@tensorflow/tfjs-node": "^4.17.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
