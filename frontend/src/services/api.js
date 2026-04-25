@@ -134,4 +134,20 @@ export const botAPI = {
   getHealth: () => api.get('/bot/health')
 }
 
+// ================================
+// ML API
+// ================================
+export const mlAPI = {
+  getHealth: () => api.get('/ml/health'),
+  predict: (data) => api.post('/ml/predict', data),
+  predictPublic: (data, apiKey) => api.post('/ml/predict/public', data, {
+    headers: { 'x-api-key': apiKey }
+  }),
+  autoTrain: (data) => api.post('/ml/auto-train', data),
+  train: (data) => api.post('/ml/train', data),
+  getModels: () => api.get('/ml/models'),
+  getStats: () => api.get('/ml/stats'),
+  unlock: (key) => api.post('/ml/unlock', null, { params: { key } })
+}
+
 export default api

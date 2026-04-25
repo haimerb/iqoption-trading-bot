@@ -43,6 +43,64 @@ export const useAuthStore = create(
 )
 
 /**
+ * Store ML / IA Predictions
+ */
+export const useMLStore = create((set, get) => ({
+  // Modelos entrenados
+  models: [],
+  
+  // Predicciones actuales por activo
+  predictions: {},
+  
+  // Histórico de predicciones
+  predictionHistory: [],
+  
+  // Stats del ML
+  mlStats: {
+    totalPredictions: 0,
+    correct: 0,
+    accuracy: 0
+  },
+  
+  // Configuración
+  config: {
+    minConfidence: 0.65,
+    usePatterns: true,
+    useML: true,
+    selectedAsset: 'EURUSD',
+    selectedTimeframe: '1m'
+  },
+  
+  // Estado
+  isLoading: false,
+  lastError: null,
+  
+  setModels: (models) => set({ models }),
+  
+  setPrediction: (asset, prediction) => set(state => ({
+    predictions: { ...state.predictions, [asset]: prediction }
+  })),
+  
+  addToHistory: (prediction) => set(state => ({
+    predictionHistory: [{
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      ...prediction
+    }, ...state.predictionHistory].slice(0, 500)
+  })),
+  
+  setMLStats: (stats) => set({ mlStats: stats }),
+  
+  updateConfig: (config) => set(state => ({
+    config: { ...state.config, ...config }
+  })),
+  
+  setLoading: (isLoading) => set({ isLoading }),
+  
+  setError: (lastError) => set({ lastError })
+}))
+
+/**
  * Store del bot de trading
  */
 export const useBotStore = create((set, get) => ({

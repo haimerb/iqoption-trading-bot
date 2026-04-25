@@ -8,6 +8,12 @@ const orderExecution = require('../order-execution/orderExecutionModule');
 // Estrategias disponibles
 const MACrossoverStrategy = require('./MACrossoverStrategy');
 const { RSIStrategy, BollingerBandsStrategy, GridTradingStrategy } = require('./strategies');
+let AIStrategy = null;
+try {
+  AIStrategy = require('./AIStrategy');
+} catch (e) {
+  logger.warn('AI Strategy no disponible:', e.message);
+}
 
 /**
  * Mapa de estrategias disponibles (registro)
@@ -18,6 +24,10 @@ const STRATEGY_REGISTRY = {
   'bollinger-bands': BollingerBandsStrategy,
   'grid-trading': GridTradingStrategy
 };
+
+if (AIStrategy) {
+  STRATEGY_REGISTRY['ai-prediction'] = AIStrategy;
+}
 
 /**
  * Gestor de Estrategias
