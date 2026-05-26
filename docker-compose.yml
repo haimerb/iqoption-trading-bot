@@ -90,6 +90,25 @@ services:
     networks:
       - iqbot-network
 
+  # ─────────────────────── E2E Client (dev) ───────────────────────
+  e2e-client:
+    image: node:20-alpine
+    container_name: iqbot-e2e-client
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ./backend/e2e-client:/app:ro
+    command: sh -c "npm install --silent && node index.js"
+    environment:
+      - BACKEND_URL=http://backend:3000
+      - E2E_EMAIL=hbarbetti.ing@icloud.com
+      - E2E_PASSWORD=DeporvidaCdc1*
+    networks:
+      - iqbot-network
+
   # ─────────────────────────── ML Service ──────────────────────────
   ml-service:
     build:

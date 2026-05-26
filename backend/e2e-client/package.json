@@ -1,0 +1,14 @@
+{
+  "name": "iqbot-e2e-client",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E2E client to test login + Socket.IO",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "socket.io-client": "^4.6.2"
+  }
+}
