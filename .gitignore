@@ -26,6 +26,12 @@ backend/coverage/
 .DS_Store
 Thumbs.db
 
+# Agent instructions
+AGENTS.md
+
+# ML training data
+backend/training_data.json
+
 # Editor
 .vscode/settings.json
 .idea/
