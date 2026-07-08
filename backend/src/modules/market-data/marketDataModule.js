@@ -109,6 +109,23 @@ class MarketDataModule extends EventEmitter {
   }
 
   /**
+   * Obtener velas cacheadas por símbolo (para compatibilidad con ML controller)
+   * @param {string} symbol - Símbolo del activo (EURUSD, BTCUSD, etc.)
+   * @param {number} size - Tamaño de vela en segundos
+   * @param {number} count - Número máximo de velas
+   * @returns {Array} Velas cacheadas
+   */
+  getCandles(symbol, size = 60, count = 100) {
+    for (const [activeId, asset] of this.subscribedAssets) {
+      if (asset.symbol === symbol) {
+        const candles = this.getCachedCandles(activeId, size);
+        return candles.slice(-count);
+      }
+    }
+    return [];
+  }
+
+  /**
    * Obtener lista de activos disponibles
    */
   async getAvailableAssets() {
