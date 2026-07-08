@@ -318,15 +318,13 @@ module.exports = {
 
   async getCandles(req, res, next) {
     try {
-      const { asset, timeframe, count } = req.params;
-      const assetName = asset || 'EURUSD';
+      const assetName = req.params.asset || 'EURUSD';
+      const timeframe = req.query.timeframe || '1m';
+      const count = parseInt(req.query.count) || 100;
 
       const marketDataModule = require('../modules/market-data/marketDataModule');
-      const candles = marketDataModule.getCandles(
-        assetName,
-        timeframe === '5m' ? 300 : timeframe === '15m' ? 900 : 60,
-        count || 100
-      );
+      const size = timeframe === '5m' ? 300 : timeframe === '15m' ? 900 : timeframe === '30m' ? 1800 : timeframe === '1h' ? 3600 : 60;
+      const candles = marketDataModule.getCandles(assetName, size, count);
 
       res.json({
         success: true,

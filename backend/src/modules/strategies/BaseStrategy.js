@@ -245,7 +245,7 @@ class BaseStrategy extends EventEmitter {
   }
 
   /**
-   * MACD
+   * MACD - Calcula MACD con línea de señal real (EMA del MACD)
    */
   calculateMACD(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     if (closes.length < slowPeriod + signalPeriod) return null;
@@ -256,11 +256,26 @@ class BaseStrategy extends EventEmitter {
     if (fastEMA === null || slowEMA === null) return null;
 
     const macdLine = fastEMA - slowEMA;
-    // Simplificado: señal como EMA del MACD
+
+    // Calcular señal como EMA de los valores MACD en el rango
+    const macdValues = [];
+    for (let i = signalPeriod; i < closes.length; i++) {
+      const slice = closes.slice(0, i + 1);
+      const fe = this.calculateEMA(slice, fastPeriod);
+      const se = this.calculateEMA(slice, slowPeriod);
+      if (fe !== null && se !== null) {
+        macdValues.push(fe - se);
+      }
+    }
+
+    const signal = macdValues.length >= signalPeriod
+      ? this.calculateEMA(macdValues, signalPeriod)
+      : macdLine * 0.2;
+
     return {
       macd: macdLine,
-      signal: macdLine * 0.2, // Aproximación
-      histogram: macdLine - macdLine * 0.2
+      signal: signal || macdLine * 0.2,
+      histogram: macdLine - (signal || macdLine * 0.2)
     };
   }
 
@@ -285,6 +300,17 @@ class BaseStrategy extends EventEmitter {
 
   _validateParams(params) {
     return params; // Sobreescribir en subclases para validación específica
+  }
+
+  /**
+   * Retorna estadísticas de la estrategia (incluye winRate calculado)
+   */
+  getStats() {
+    const totalOrders = this.stats.totalOrders || 1;
+    return {
+      ...this.stats,
+      winRate: totalOrders > 0 ? (this.stats.wins / totalOrders) * 100 : 0
+    };
   }
 
   toJSON() {
