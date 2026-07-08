@@ -33,6 +33,23 @@ jest.mock('../../src/modules/logger/logger', () => ({
   http: jest.fn()
 }))
 
+jest.mock('../../src/models/User', () => {
+  const mockDb = new Map()
+  return {
+    find: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+    findOne: jest.fn().mockImplementation(({ email }) => ({
+      lean: jest.fn().mockResolvedValue(mockDb.get(email) || null)
+    })),
+    create: jest.fn().mockImplementation((data) => {
+      const doc = { ...data, _id: require('uuid').v4(), toObject: () => ({ ...doc, _id: doc._id }) }
+      mockDb.set(data.email, doc)
+      return Promise.resolve(doc)
+    }),
+    updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    countDocuments: jest.fn().mockResolvedValue(0)
+  }
+})
+
 const app = require('../../src/app')
 
 describe('Auth API — /api/v1/auth', () => {

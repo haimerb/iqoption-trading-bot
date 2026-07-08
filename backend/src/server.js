@@ -18,6 +18,10 @@ async function bootstrap() {
     await connectDatabase();
     logger.info('✅ MongoDB conectado');
 
+    // 1b. Sembrar datos iniciales
+    await require('./modules/seed/migrate')();
+    logger.info('✅ Datos iniciales sembrados');
+
     // 2. Conectar Redis
     await connectRedis();
     logger.info('✅ Redis conectado');

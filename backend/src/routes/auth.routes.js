@@ -135,4 +135,28 @@ router.post('/logout', authenticate, authController.logout);
  */
 router.get('/status', authenticate, authController.getSessionStatus);
 
+/**
+ * @swagger
+ * /auth/tokens:
+ *   post:
+ *     summary: Generar token de login de un solo uso para URLs seguras
+ *     tags: [Autenticación]
+ *     responses:
+ *       200: { description: Token generado }
+ */
+router.post('/tokens', authenticate, authController.generateLoginToken);
+
+/**
+ * @swagger
+ * /auth/login-with-token:
+ *   post:
+ *     summary: Intercambiar token de un solo uso por JWT
+ *     tags: [Autenticación]
+ *     security: []
+ *     responses:
+ *       200: { description: Login exitoso }
+ *       401: { description: Token inválido o expirado }
+ */
+router.post('/login-with-token', authController.loginWithToken);
+
 module.exports = router;

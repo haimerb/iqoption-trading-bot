@@ -25,6 +25,24 @@ jest.mock('../../src/modules/logger/logger', () => ({
   info: jest.fn(), warn: jest.fn(), error: jest.fn(),
   trading: jest.fn(), security: jest.fn(), http: jest.fn()
 }))
+
+jest.mock('../../src/models/User', () => {
+  const mockDb = new Map()
+  return {
+    find: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+    findOne: jest.fn().mockImplementation(({ email }) => ({
+      lean: jest.fn().mockResolvedValue(mockDb.get(email) || null)
+    })),
+    create: jest.fn().mockImplementation((data) => {
+      const doc = { ...data, _id: require('uuid').v4(), toObject: () => ({ ...doc, _id: doc._id }) }
+      mockDb.set(data.email, doc)
+      return Promise.resolve(doc)
+    }),
+    updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    countDocuments: jest.fn().mockResolvedValue(0)
+  }
+})
+
 jest.mock('../../src/modules/queue/queueWorkers', () => ({
   initQueueWorkers: jest.fn(),
   queueOrder: jest.fn().mockResolvedValue({ id: 'job-mock-1' }),

@@ -2,16 +2,8 @@
 
 const EventEmitter = require('events');
 const logger = require('../logger/logger');
+const https = require('https');
 
-/**
- * Módulo de Conexión y Autenticación con IQ Option
- * 
- * Gestiona la conexión WebSocket con la API de IQ Option,
- * autenticación, reconexión automática y estado de sesión.
- * 
- * NOTA: Usar la librería oficial: https://github.com/iqoptionapi/iqoptionapi
- * npm install iqoptionapi (Python wrapper) o equivalente Node.js
- */
 class IQOptionConnection extends EventEmitter {
   constructor() {
     super();
@@ -26,28 +18,16 @@ class IQOptionConnection extends EventEmitter {
     this.heartbeatInterval = null;
   }
 
-  /**
-   * Inicializar conexión con IQ Option
-   * @param {string} email - Email de la cuenta IQ Option
-   * @param {string} password - Contraseña (debe estar cifrada en .env)
-   */
   async connect(email, password) {
     try {
       logger.info('IQOption: Iniciando conexión...');
       this.credentials = { email, password };
 
-      // =====================================================
-      // INTEGRACIÓN CON LIBRERÍA OFICIAL IQ OPTION
-      // =====================================================
-      // La librería oficial de IQ Option es en Python.
-      // Para Node.js se usa un bridge o la API websocket directamente.
-      // 
-      // Opción 1: Usar el bridge Python (iqoptionapi)
-      // Opción 2: Implementar cliente WebSocket directo
-      // 
-      // Implementación WebSocket nativa:
+      const ssid = await this._httpLogin(email, password);
+      logger.info('IQOption: SSID obtenido exitosamente');
+
       const WebSocket = require('ws');
-      
+
       this.ws = new WebSocket('wss://iqoption.com/echo/websocket', {
         headers: {
           'Origin': 'https://iqoption.com',
@@ -56,7 +36,7 @@ class IQOptionConnection extends EventEmitter {
       });
 
       await this._setupWebSocket();
-      await this._authenticate(email, password);
+      await this._authenticate(ssid);
       this._startHeartbeat();
 
       logger.info('IQOption: Conexión y autenticación exitosa');
@@ -70,9 +50,47 @@ class IQOptionConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Configurar listeners del WebSocket
-   */
+  _httpLogin(email, password) {
+    return new Promise((resolve, reject) => {
+      const postData = JSON.stringify({ identifier: email, password });
+
+      const options = {
+        hostname: 'auth.iqoption.com',
+        path: '/api/v2/login',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          const cookies = res.headers['set-cookie'] || [];
+          const ssidCookie = cookies.find(c => c.startsWith('ssid='));
+          if (ssidCookie) {
+            const ssid = ssidCookie.split(';')[0].replace('ssid=', '');
+            resolve(ssid);
+          } else {
+            try {
+              const parsed = JSON.parse(body);
+              reject(new Error(parsed.message || 'Login HTTP fallido'));
+            } catch {
+              reject(new Error('No se recibió SSID en la respuesta'));
+            }
+          }
+        });
+      });
+
+      req.on('error', (err) => reject(err));
+      req.write(postData);
+      req.end();
+    });
+  }
+
   _setupWebSocket() {
     return new Promise((resolve, reject) => {
       const connectionTimeout = setTimeout(() => {
@@ -99,9 +117,13 @@ class IQOptionConnection extends EventEmitter {
         clearTimeout(connectionTimeout);
         this.isConnected = false;
         this.isAuthenticated = false;
-        logger.warn('IQOption WebSocket: Conexión cerrada', { code, reason: reason.toString() });
+        logger.warn('IQOption WebSocket: Conexión cerrada', { code, reason: reason ? reason.toString() : '' });
         this.emit('disconnected', { code, reason });
-        this._scheduleReconnect();
+        if (code !== 1000) {
+          this._scheduleReconnect();
+        } else {
+          logger.info('IQOption: Conexión cerrada normalmente (code 1000), no se reintenta');
+        }
       });
 
       this.ws.on('error', (error) => {
@@ -113,18 +135,11 @@ class IQOptionConnection extends EventEmitter {
     });
   }
 
-  /**
-   * Autenticación con IQ Option
-   */
-  async _authenticate(email, password) {
+  _authenticate(ssid) {
     return new Promise((resolve, reject) => {
       const authPayload = {
         name: 'ssid',
-        msg: {
-          login: email,
-          password: password,
-          remember: true
-        }
+        msg: ssid
       };
 
       this.ws.send(JSON.stringify(authPayload));
@@ -146,9 +161,6 @@ class IQOptionConnection extends EventEmitter {
     });
   }
 
-  /**
-   * Manejar mensajes del WebSocket
-   */
   _handleMessage(message) {
     switch (message.name) {
       case 'profile':
@@ -174,9 +186,6 @@ class IQOptionConnection extends EventEmitter {
     }
   }
 
-/**
-    * Enviar mensaje al WebSocket
-    */
   send(name, msg) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== 1) {
       logger.warn('IQOption: WebSocket no conectado, ignorando mensaje');
@@ -185,9 +194,6 @@ class IQOptionConnection extends EventEmitter {
     this.ws.send(JSON.stringify({ name, msg }));
   }
 
-  /**
-   * Heartbeat para mantener conexión activa
-   */
   _startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected && this.ws && this.ws.readyState === 1) {
@@ -200,9 +206,6 @@ class IQOptionConnection extends EventEmitter {
     }, 30000);
   }
 
-  /**
-   * Programar reconexión automática
-   */
   _scheduleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       logger.error('IQOption: Máximo de intentos de reconexión alcanzado');
@@ -225,9 +228,6 @@ class IQOptionConnection extends EventEmitter {
     }, delay);
   }
 
-  /**
-   * Suscribirse a precios en tiempo real
-   */
   subscribeToAsset(activeId, size = 1) {
     this.send('subscribeMessage', {
       name: 'candle-generated',
@@ -240,9 +240,6 @@ class IQOptionConnection extends EventEmitter {
     });
   }
 
-  /**
-   * Desconectar
-   */
   disconnect() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     if (this.ws) {
@@ -254,9 +251,6 @@ class IQOptionConnection extends EventEmitter {
     logger.info('IQOption: Desconectado manualmente');
   }
 
-  /**
-   * Obtener estado actual de la conexión
-   */
   getStatus() {
     return {
       isConnected: this.isConnected,
@@ -271,6 +265,5 @@ class IQOptionConnection extends EventEmitter {
   }
 }
 
-// Singleton
 const connectionInstance = new IQOptionConnection();
 module.exports = connectionInstance;

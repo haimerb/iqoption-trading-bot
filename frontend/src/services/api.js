@@ -67,7 +67,9 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   logout: () => api.post('/auth/logout'),
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
-  getStatus: () => api.get('/auth/status')
+  getStatus: () => api.get('/auth/status'),
+  generateLoginToken: () => api.post('/auth/tokens'),
+  loginWithToken: (token) => api.post('/auth/login-with-token', { token })
 }
 
 // ================================

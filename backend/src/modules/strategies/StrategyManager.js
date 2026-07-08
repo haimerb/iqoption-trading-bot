@@ -4,8 +4,8 @@ const EventEmitter = require('events');
 const logger = require('../logger/logger');
 const marketData = require('../market-data/marketDataModule');
 const orderExecution = require('../order-execution/orderExecutionModule');
+const Strategy = require('../../models/Strategy');
 
-// Estrategias disponibles
 const MACrossoverStrategy = require('./MACrossoverStrategy');
 const { RSIStrategy, BollingerBandsStrategy, GridTradingStrategy } = require('./strategies');
 let AIStrategy = null;
@@ -15,9 +15,6 @@ try {
   logger.warn('AI Strategy no disponible:', e.message);
 }
 
-/**
- * Mapa de estrategias disponibles (registro)
- */
 const STRATEGY_REGISTRY = {
   'ma-crossover': MACrossoverStrategy,
   'rsi': RSIStrategy,
@@ -29,20 +26,37 @@ if (AIStrategy) {
   STRATEGY_REGISTRY['ai-prediction'] = AIStrategy;
 }
 
-/**
- * Gestor de Estrategias
- * Instancia, registra y coordina el ciclo de vida de todas las estrategias.
- */
 class StrategyManager extends EventEmitter {
   constructor() {
     super();
-    this.strategies = new Map();     // strategyId -> instancia
-    this.candleListeners = new Map(); // strategyId -> listener function
+    this.strategies = new Map();
+    this.candleListeners = new Map();
+    this._loadFromDb();
   }
 
-  /**
-   * Obtener lista de estrategias disponibles en el registro
-   */
+  async _loadFromDb() {
+    try {
+      const docs = await Strategy.find({ status: { $ne: 'stopped' } }).lean();
+      for (const doc of docs) {
+        try {
+          const StratClass = STRATEGY_REGISTRY[doc.type];
+          if (!StratClass) continue;
+          const instance = new StratClass(doc.params || {});
+          instance.id = doc._id.toString();
+          instance.status = doc.status || 'stopped';
+          if (instance.status === 'running' && doc.activeId) {
+            this.strategies.set(instance.id, instance);
+          }
+        } catch (e) {
+          logger.warn(`StrategyManager: Error cargando estrategia ${doc._id}`, { error: e.message });
+        }
+      }
+      logger.info(`StrategyManager: ${docs.length} estrategias cargadas desde MongoDB`);
+    } catch (err) {
+      logger.warn('StrategyManager: No se pudieron cargar estrategias desde MongoDB', { error: err.message });
+    }
+  }
+
   getAvailableStrategies() {
     return Object.keys(STRATEGY_REGISTRY).map(key => {
       const StratClass = STRATEGY_REGISTRY[key];
@@ -57,13 +71,7 @@ class StrategyManager extends EventEmitter {
     });
   }
 
-  /**
-   * Crear una nueva instancia de estrategia
-   * @param {string} type - Tipo de estrategia (key en STRATEGY_REGISTRY)
-   * @param {Object} params - Parámetros configurables
-   * @returns {Object} - La estrategia serializada
-   */
-  createStrategy(type, params = {}) {
+  async createStrategy(type, params = {}) {
     const StratClass = STRATEGY_REGISTRY[type];
     if (!StratClass) {
       throw new Error(`Tipo de estrategia desconocido: ${type}. Disponibles: ${Object.keys(STRATEGY_REGISTRY).join(', ')}`);
@@ -72,7 +80,19 @@ class StrategyManager extends EventEmitter {
     const instance = new StratClass(params);
     this.strategies.set(instance.id, instance);
 
-    // Conectar resultados de órdenes a la estrategia
+    try {
+      await Strategy.create({
+        type,
+        name: instance.name,
+        description: instance.description,
+        version: instance.version,
+        params,
+        status: 'stopped'
+      });
+    } catch (err) {
+      logger.error('StrategyManager: Error guardando estrategia en MongoDB', { error: err.message });
+    }
+
     orderExecution.on('positionClosed', (result) => {
       instance.onOrderResult(result);
     });
@@ -81,22 +101,14 @@ class StrategyManager extends EventEmitter {
     return instance.toJSON();
   }
 
-  /**
-   * Iniciar una estrategia
-   * @param {string} strategyId
-   * @param {number} activeId - Activo a operar
-   * @param {number[]} candleSizes - Tamaños de vela para análisis
-   */
   async startStrategy(strategyId, activeId, candleSizes = [60]) {
     const strategy = this.strategies.get(strategyId);
     if (!strategy) throw new Error(`Estrategia ${strategyId} no encontrada`);
 
     await strategy.start(activeId);
 
-    // Suscribir al activo
     marketData.subscribe(activeId, `Asset_${activeId}`, candleSizes);
 
-    // Crear listener de velas
     const listener = async (candle) => {
       if (strategy.status !== 'running') return;
 
@@ -119,45 +131,54 @@ class StrategyManager extends EventEmitter {
     marketData.on(eventName, listener);
     this.candleListeners.set(strategyId, { eventName, listener });
 
-    // Conectar señales de la estrategia
     strategy.on('signal', (signal) => {
       this.emit('signal', signal);
     });
+
+    try {
+      await Strategy.updateOne({ _id: strategyId }, { status: 'running', activeId });
+    } catch (err) {
+      logger.error('StrategyManager: Error actualizando estrategia en MongoDB', { error: err.message });
+    }
 
     logger.info(`StrategyManager: Estrategia ${strategy.name} iniciada en activo ${activeId}`);
     return strategy.toJSON();
   }
 
-  /**
-   * Pausar una estrategia
-   */
   async pauseStrategy(strategyId) {
     const strategy = this.strategies.get(strategyId);
     if (!strategy) throw new Error(`Estrategia ${strategyId} no encontrada`);
     await strategy.pause();
+
+    try {
+      await Strategy.updateOne({ _id: strategyId }, { status: 'paused' });
+    } catch (err) {
+      logger.error('StrategyManager: Error actualizando estrategia en MongoDB', { error: err.message });
+    }
+
     return strategy.toJSON();
   }
 
-  /**
-   * Resumir estrategia pausada
-   */
   async resumeStrategy(strategyId) {
     const strategy = this.strategies.get(strategyId);
     if (!strategy) throw new Error(`Estrategia ${strategyId} no encontrada`);
     await strategy.resume();
+
+    try {
+      await Strategy.updateOne({ _id: strategyId }, { status: 'running' });
+    } catch (err) {
+      logger.error('StrategyManager: Error actualizando estrategia en MongoDB', { error: err.message });
+    }
+
     return strategy.toJSON();
   }
 
-  /**
-   * Detener y eliminar estrategia
-   */
   async stopStrategy(strategyId) {
     const strategy = this.strategies.get(strategyId);
     if (!strategy) throw new Error(`Estrategia ${strategyId} no encontrada`);
 
     await strategy.stop();
 
-    // Remover listener
     const listenerData = this.candleListeners.get(strategyId);
     if (listenerData) {
       marketData.removeListener(listenerData.eventName, listenerData.listener);
@@ -165,30 +186,33 @@ class StrategyManager extends EventEmitter {
     }
 
     this.strategies.delete(strategyId);
+
+    try {
+      await Strategy.updateOne({ _id: strategyId }, { status: 'stopped', activeId: null });
+    } catch (err) {
+      logger.error('StrategyManager: Error actualizando estrategia en MongoDB', { error: err.message });
+    }
+
     logger.info(`StrategyManager: Estrategia ${strategy.name} detenida y eliminada`);
     return { success: true };
   }
 
-  /**
-   * Actualizar parámetros de una estrategia
-   */
   updateStrategyParams(strategyId, params) {
     const strategy = this.strategies.get(strategyId);
     if (!strategy) throw new Error(`Estrategia ${strategyId} no encontrada`);
     strategy.updateParams(params);
+
+    Strategy.updateOne({ _id: strategyId }, { params }).catch(err => {
+      logger.error('StrategyManager: Error actualizando params en MongoDB', { error: err.message });
+    });
+
     return strategy.toJSON();
   }
 
-  /**
-   * Obtener todas las estrategias activas
-   */
   getAllStrategies() {
     return Array.from(this.strategies.values()).map(s => s.toJSON());
   }
 
-  /**
-   * Ejecutar señal generada por una estrategia
-   */
   async _executeSignal(signal) {
     try {
       logger.trading('EXECUTING_SIGNAL', signal);
@@ -202,10 +226,7 @@ class StrategyManager extends EventEmitter {
       this.emit('orderOpened', { signal, order });
       return order;
     } catch (err) {
-      logger.error(`StrategyManager: Error ejecutando señal`, {
-        signal,
-        error: err.message
-      });
+      logger.error(`StrategyManager: Error ejecutando señal`, { signal, error: err.message });
       this.emit('signalExecutionError', { signal, error: err.message });
       throw err;
     }

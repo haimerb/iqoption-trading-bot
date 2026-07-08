@@ -6,14 +6,31 @@ const { validationResult } = require('express-validator');
 const logger = require('../modules/logger/logger');
 const connection = require('../modules/connection/iqOptionConnection');
 const CryptoJS = require('crypto-js');
-const { users: seededUsers } = require('../modules/seed/users');
+const User = require('../models/User');
 
-const users = seededUsers;
+const users = new Map();
 
-/**
- * Registrar usuario en el sistema local
- * POST /api/v1/auth/register
- */
+async function loadUsersFromDb() {
+  try {
+    const docs = await User.find({}).lean();
+    for (const doc of docs) {
+      users.set(doc.email, doc);
+    }
+    logger.info(`Auth: ${docs.length} usuarios cargados desde MongoDB`);
+  } catch (err) {
+    logger.warn('Auth: No se pudieron cargar usuarios desde MongoDB', { error: err.message });
+  }
+}
+loadUsersFromDb();
+
+const loginTokens = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of loginTokens) {
+    if (data.expiresAt < now) loginTokens.delete(token);
+  }
+}, 300000);
+
 async function register(req, res, next) {
   try {
     const errors = validationResult(req);
@@ -31,40 +48,35 @@ async function register(req, res, next) {
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const encryptionKey = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default_encryption_key_32chars_long';
-    const encryptedIqPassword = CryptoJS.AES.encrypt(
-      iqPassword,
-      encryptionKey
-    ).toString();
+    const encryptedIqPassword = CryptoJS.AES.encrypt(iqPassword, encryptionKey).toString();
 
-    const userId = require('uuid').v4();
-    const user = {
-      id: userId,
+    const userData = {
       email,
       password: hashedPassword,
       iqEmail,
       iqPassword: encryptedIqPassword,
-      role: 'user',
-      createdAt: new Date().toISOString()
+      role: 'user'
     };
 
-    users.set(email, user);
+    const created = await User.create(userData);
+    const newUser = created.toObject();
+    users.set(email, newUser);
 
-    logger.security('USER_REGISTERED', { userId, email });
+    logger.security('USER_REGISTERED', { userId: newUser._id.toString(), email });
 
     res.status(201).json({
       success: true,
       message: 'Usuario registrado exitosamente',
-      data: { userId, email, role: user.role }
+      data: { userId: newUser._id, email, role: newUser.role }
     });
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ success: false, error: 'Usuario ya existe', code: 'USER_EXISTS' });
+    }
     next(err);
   }
 }
 
-/**
- * Login en el sistema y autenticar con IQ Option
- * POST /api/v1/auth/login
- */
 async function login(req, res, next) {
   try {
     const errors = validationResult(req);
@@ -73,7 +85,12 @@ async function login(req, res, next) {
     }
 
     const { email, password } = req.body;
-    const user = users.get(email);
+    let user = users.get(email);
+
+    if (!user) {
+      user = await User.findOne({ email }).lean();
+      if (user) users.set(email, user);
+    }
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       logger.security('FAILED_LOGIN_ATTEMPT', { email, ip: req.ip });
@@ -82,14 +99,9 @@ async function login(req, res, next) {
       });
     }
 
-    // Desencriptar credenciales IQ Option
     const encryptionKey = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default_encryption_key_32chars_long';
-    const iqPassword = CryptoJS.AES.decrypt(
-      user.iqPassword,
-      encryptionKey
-    ).toString(CryptoJS.enc.Utf8);
+    const iqPassword = CryptoJS.AES.decrypt(user.iqPassword, encryptionKey).toString(CryptoJS.enc.Utf8);
 
-    // Conectar con IQ Option (opcional - no falla el login)
     let iqSession = null;
     try {
       iqSession = await connection.connect(user.iqEmail, iqPassword);
@@ -97,9 +109,8 @@ async function login(req, res, next) {
       logger.warn('Auth: IQ Option no disponible, continuando sin sesión', { error: iqErr.message });
     }
 
-    // Generar JWT
     const payload = {
-      userId: user.id,
+      userId: user._id ? user._id.toString() : user.id,
       email: user.email,
       role: user.role
     };
@@ -112,7 +123,9 @@ async function login(req, res, next) {
       expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
     });
 
-    logger.security('USER_LOGIN', { userId: user.id, email, ip: req.ip });
+    await User.updateOne({ _id: user._id }, { lastLoginAt: new Date() });
+
+    logger.security('USER_LOGIN', { userId: payload.userId, email, ip: req.ip });
 
     res.json({
       success: true,
@@ -120,7 +133,7 @@ async function login(req, res, next) {
         token,
         refreshToken,
         expiresIn: 86400,
-        user: { id: user.id, email: user.email, role: user.role },
+        user: { id: payload.userId, email: user.email, role: user.role },
         iqSession: {
           balance: iqSession?.balance || 10000,
           currency: iqSession?.currency || 'USD',
@@ -134,10 +147,6 @@ async function login(req, res, next) {
   }
 }
 
-/**
- * Refrescar token JWT
- * POST /api/v1/auth/refresh
- */
 async function refreshToken(req, res, next) {
   try {
     const { refreshToken: token } = req.body;
@@ -147,14 +156,18 @@ async function refreshToken(req, res, next) {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-    const user = users.get(decoded.email);
+    let user = users.get(decoded.email);
 
     if (!user) {
-      return res.status(401).json({ success: false, error: 'Usuario no encontrado' });
+      user = await User.findOne({ email: decoded.email }).lean();
+      if (!user) {
+        return res.status(401).json({ success: false, error: 'Usuario no encontrado' });
+      }
+      users.set(decoded.email, user);
     }
 
     const newToken = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { userId: user._id ? user._id.toString() : user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
@@ -168,10 +181,6 @@ async function refreshToken(req, res, next) {
   }
 }
 
-/**
- * Logout - desconectar de IQ Option
- * POST /api/v1/auth/logout
- */
 async function logout(req, res, next) {
   try {
     connection.disconnect();
@@ -182,10 +191,6 @@ async function logout(req, res, next) {
   }
 }
 
-/**
- * Estado de la sesión actual
- * GET /api/v1/auth/status
- */
 async function getSessionStatus(req, res) {
   const status = connection.getStatus();
   res.json({
@@ -198,4 +203,65 @@ async function getSessionStatus(req, res) {
   });
 }
 
-module.exports = { register, login, refreshToken, logout, getSessionStatus };
+async function generateLoginToken(req, res, next) {
+  try {
+    let user = users.get(req.user.email);
+    if (!user) {
+      user = await User.findOne({ email: req.user.email }).lean();
+    }
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+    }
+
+    const token = require('uuid').v4();
+    loginTokens.set(token, {
+      userId: user._id ? user._id.toString() : user.id,
+      email: user.email,
+      role: user.role,
+      expiresAt: Date.now() + 300000
+    });
+
+    logger.security('LOGIN_TOKEN_GENERATED', { userId: user._id?.toString() || user.id, email: user.email });
+    res.json({ success: true, data: { token, expiresIn: 300 } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function loginWithToken(req, res, next) {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Token requerido' });
+    }
+
+    const tokenData = loginTokens.get(token);
+    if (!tokenData) {
+      return res.status(401).json({ success: false, error: 'Token inválido o expirado', code: 'INVALID_LOGIN_TOKEN' });
+    }
+
+    if (tokenData.expiresAt < Date.now()) {
+      loginTokens.delete(token);
+      return res.status(401).json({ success: false, error: 'Token expirado', code: 'LOGIN_TOKEN_EXPIRED' });
+    }
+
+    loginTokens.delete(token);
+
+    const payload = { userId: tokenData.userId, email: tokenData.email, role: tokenData.role };
+    const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+    });
+    const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
+      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+    });
+
+    res.json({
+      success: true,
+      data: { token: jwtToken, refreshToken, expiresIn: 86400, user: payload }
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, refreshToken, logout, getSessionStatus, generateLoginToken, loginWithToken };
