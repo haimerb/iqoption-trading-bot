@@ -6,9 +6,9 @@ const { validationResult } = require('express-validator');
 const logger = require('../modules/logger/logger');
 const connection = require('../modules/connection/iqOptionConnection');
 const CryptoJS = require('crypto-js');
+const { users: seededUsers } = require('../modules/seed/users');
 
-// Almacén en memoria de usuarios (en producción usar MongoDB)
-const users = new Map();
+const users = seededUsers;
 
 /**
  * Registrar usuario en el sistema local
@@ -30,9 +30,10 @@ async function register(req, res, next) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    const encryptionKey = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default_encryption_key_32chars_long';
     const encryptedIqPassword = CryptoJS.AES.encrypt(
       iqPassword,
-      process.env.ENCRYPTION_KEY
+      encryptionKey
     ).toString();
 
     const userId = require('uuid').v4();
@@ -82,22 +83,18 @@ async function login(req, res, next) {
     }
 
     // Desencriptar credenciales IQ Option
+    const encryptionKey = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default_encryption_key_32chars_long';
     const iqPassword = CryptoJS.AES.decrypt(
       user.iqPassword,
-      process.env.ENCRYPTION_KEY
+      encryptionKey
     ).toString(CryptoJS.enc.Utf8);
 
-    // Conectar con IQ Option
+    // Conectar con IQ Option (opcional - no falla el login)
     let iqSession = null;
     try {
       iqSession = await connection.connect(user.iqEmail, iqPassword);
     } catch (iqErr) {
-      logger.error('Auth: Error conectando con IQ Option', { error: iqErr.message });
-      return res.status(502).json({
-        success: false,
-        error: 'No se pudo conectar con IQ Option. Verifica las credenciales.',
-        code: 'IQ_CONNECTION_FAILED'
-      });
+      logger.warn('Auth: IQ Option no disponible, continuando sin sesión', { error: iqErr.message });
     }
 
     // Generar JWT
@@ -125,9 +122,10 @@ async function login(req, res, next) {
         expiresIn: 86400,
         user: { id: user.id, email: user.email, role: user.role },
         iqSession: {
-          balance: iqSession?.balance,
-          currency: iqSession?.currency,
-          userId: iqSession?.userId
+          balance: iqSession?.balance || 10000,
+          currency: iqSession?.currency || 'USD',
+          userId: iqSession?.userId || null,
+          connected: !!iqSession
         }
       }
     });
