@@ -1,3 +1,7 @@
+// Set JWT secrets for test environment (app.js doesn't load .env)
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_key_32_chars_long_xxx'
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test_refresh_secret_key_32_char'
+
 const request = require('supertest')
 
 // Mocks antes de importar app
@@ -17,7 +21,7 @@ jest.mock('../../src/config/redis', () => ({
 jest.mock('../../src/modules/connection/iqOptionConnection', () => ({
   connect: jest.fn().mockResolvedValue({ success: true, userId: 'mock-123' }),
   disconnect: jest.fn(),
-  getStatus: jest.fn().mockReturnValue({ connected: true, userId: 'mock-123' }),
+  getStatus: jest.fn().mockReturnValue({ isConnected: true, isAuthenticated: true, sessionData: { userId: 'mock-123' } }),
   on: jest.fn(),
   once: jest.fn(),
   emit: jest.fn()
@@ -49,12 +53,9 @@ describe('Auth API — /api/v1/auth', () => {
 
       expect(res.status).toBe(201)
       expect(res.body.success).toBe(true)
-      expect(res.body.data).toHaveProperty('accessToken')
-      expect(res.body.data).toHaveProperty('refreshToken')
-      expect(res.body.data.user.email).toBe(testUser.email)
-
-      accessToken = res.body.data.accessToken
-      refreshToken = res.body.data.refreshToken
+      expect(res.body.data).toHaveProperty('userId')
+      expect(res.body.data).toHaveProperty('email')
+      expect(res.body.data.email).toBe(testUser.email)
     })
 
     test('rechaza registro con email duplicado', async () => {
@@ -82,9 +83,9 @@ describe('Auth API — /api/v1/auth', () => {
         .send({ email: testUser.email, password: testUser.password })
 
       expect(res.status).toBe(200)
-      expect(res.body.data).toHaveProperty('accessToken')
+      expect(res.body.data).toHaveProperty('token')
 
-      accessToken = res.body.data.accessToken
+      accessToken = res.body.data.token
       refreshToken = res.body.data.refreshToken
     })
 
@@ -112,7 +113,7 @@ describe('Auth API — /api/v1/auth', () => {
         .send({ refreshToken })
 
       expect(res.status).toBe(200)
-      expect(res.body.data).toHaveProperty('accessToken')
+      expect(res.body.data).toHaveProperty('token')
     })
 
     test('rechaza refresh con token inválido', async () => {
@@ -131,7 +132,7 @@ describe('Auth API — /api/v1/auth', () => {
         .set('Authorization', `Bearer ${accessToken}`)
 
       expect(res.status).toBe(200)
-      expect(res.body.data).toHaveProperty('authenticated', true)
+      expect(res.body.data).toHaveProperty('isAuthenticated', true)
     })
 
     test('rechaza petición sin token', async () => {

@@ -1,3 +1,7 @@
+// Set JWT secrets for test environment (app.js doesn't load .env)
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_key_32_chars_long_xxx'
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test_refresh_secret_key_32_char'
+
 const request = require('supertest')
 
 jest.mock('../../src/config/database', () => ({
@@ -14,7 +18,7 @@ jest.mock('../../src/config/redis', () => ({
 jest.mock('../../src/modules/connection/iqOptionConnection', () => ({
   connect: jest.fn().mockResolvedValue({ success: true, userId: 'mock-123' }),
   disconnect: jest.fn(),
-  getStatus: jest.fn().mockReturnValue({ connected: true, userId: 'mock-123' }),
+  getStatus: jest.fn().mockReturnValue({ isConnected: true, isAuthenticated: true, sessionData: { userId: 'mock-123' } }),
   on: jest.fn(), once: jest.fn(), emit: jest.fn()
 }))
 jest.mock('../../src/modules/logger/logger', () => ({
@@ -23,7 +27,7 @@ jest.mock('../../src/modules/logger/logger', () => ({
 }))
 jest.mock('../../src/modules/queue/queueWorkers', () => ({
   initQueueWorkers: jest.fn(),
-  queueOrder: jest.fn().mockResolvedValue({ jobId: 'job-mock-1', status: 'queued' }),
+  queueOrder: jest.fn().mockResolvedValue({ id: 'job-mock-1' }),
   getQueuesStatus: jest.fn().mockReturnValue({ queues: [] })
 }))
 jest.mock('../../src/modules/order-execution/orderExecutionModule', () => ({
@@ -40,10 +44,13 @@ const app = require('../../src/app')
 
 async function getAuthToken() {
   const uid = `orders-test-${Date.now()}@test.com`
-  const reg = await request(app)
+  await request(app)
     .post('/api/v1/auth/register')
     .send({ email: uid, password: 'Password123!', iqEmail: 'iq@test.com', iqPassword: 'IQ123!' })
-  return reg.body.data.accessToken
+  const login = await request(app)
+    .post('/api/v1/auth/login')
+    .send({ email: uid, password: 'Password123!' })
+  return login.body.data.token
 }
 
 describe('Orders API — /api/v1/orders', () => {
