@@ -75,7 +75,12 @@ class IQOptionConnection extends EventEmitter {
    */
   _setupWebSocket() {
     return new Promise((resolve, reject) => {
+      const connectionTimeout = setTimeout(() => {
+        reject(new Error('Timeout de conexión WebSocket'));
+      }, 15000);
+
       this.ws.on('open', () => {
+        clearTimeout(connectionTimeout);
         this.isConnected = true;
         this.reconnectAttempts = 0;
         logger.info('IQOption WebSocket: Conexión abierta');
@@ -83,10 +88,15 @@ class IQOptionConnection extends EventEmitter {
       });
 
       this.ws.on('message', (data) => {
-        this._handleMessage(JSON.parse(data));
+        try {
+          this._handleMessage(JSON.parse(data));
+        } catch (e) {
+          logger.warn('IQOption: Mensaje no válido recibido', { raw: data.toString().substring(0, 200) });
+        }
       });
 
       this.ws.on('close', (code, reason) => {
+        clearTimeout(connectionTimeout);
         this.isConnected = false;
         this.isAuthenticated = false;
         logger.warn('IQOption WebSocket: Conexión cerrada', { code, reason: reason.toString() });
@@ -95,13 +105,11 @@ class IQOptionConnection extends EventEmitter {
       });
 
       this.ws.on('error', (error) => {
+        clearTimeout(connectionTimeout);
         logger.error('IQOption WebSocket: Error', { error: error.message });
         this.emit('wsError', error);
         reject(error);
       });
-
-      // Timeout de conexión
-      setTimeout(() => reject(new Error('Timeout de conexión WebSocket')), 15000);
     });
   }
 
@@ -166,12 +174,13 @@ class IQOptionConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Enviar mensaje al WebSocket
-   */
+/**
+    * Enviar mensaje al WebSocket
+    */
   send(name, msg) {
-    if (!this.isConnected || !this.ws) {
-      throw new Error('No hay conexión activa con IQ Option');
+    if (!this.isConnected || !this.ws || this.ws.readyState !== 1) {
+      logger.warn('IQOption: WebSocket no conectado, ignorando mensaje');
+      return;
     }
     this.ws.send(JSON.stringify({ name, msg }));
   }
@@ -181,8 +190,12 @@ class IQOptionConnection extends EventEmitter {
    */
   _startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {
-      if (this.isConnected) {
-        this.send('heartbeat', { heartbeatTime: new Date().toISOString() });
+      if (this.isConnected && this.ws && this.ws.readyState === 1) {
+        try {
+          this.send('heartbeat', { heartbeatTime: new Date().toISOString() });
+        } catch (e) {
+          logger.warn('IQOption: Error en heartbeat', { error: e.message });
+        }
       }
     }, 30000);
   }
@@ -206,7 +219,7 @@ class IQOptionConnection extends EventEmitter {
         try {
           await this.connect(this.credentials.email, this.credentials.password);
         } catch (err) {
-          logger.error('IQOption: Error en reconexión', { error: err.message });
+          logger.warn('IQOption: Error en reconexión, reintentando...', { error: err.message });
         }
       }
     }, delay);
