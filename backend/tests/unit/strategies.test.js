@@ -21,28 +21,28 @@ describe('BaseStrategy — indicadores técnicos', () => {
   })
 
   test('calculateSMA retorna la media correcta', () => {
-    const candles = [
-      { close: 10 }, { close: 20 }, { close: 30 }
-    ]
-    const sma = strategy.calculateSMA(candles, 3)
+    const closes = [10, 20, 30]
+    const sma = strategy.calculateSMA(closes, 3)
     expect(sma).toBeCloseTo(20)
   })
 
   test('calculateSMA devuelve null con datos insuficientes', () => {
-    const candles = [{ close: 10 }]
-    expect(strategy.calculateSMA(candles, 5)).toBeNull()
+    const closes = [10]
+    expect(strategy.calculateSMA(closes, 5)).toBeNull()
   })
 
   test('calculateEMA retorna valor finito', () => {
     const candles = generateCandles(30, 100)
-    const ema = strategy.calculateEMA(candles, 14)
+    const closes = candles.map(c => c.close)
+    const ema = strategy.calculateEMA(closes, 14)
     expect(ema).not.toBeNull()
     expect(isFinite(ema)).toBe(true)
   })
 
   test('calculateRSI retorna valor entre 0 y 100', () => {
     const candles = generateCandles(30, 100, 'oscillate')
-    const rsi = strategy.calculateRSI(candles, 14)
+    const closes = candles.map(c => c.close)
+    const rsi = strategy.calculateRSI(closes, 14)
     expect(rsi).not.toBeNull()
     expect(rsi).toBeGreaterThanOrEqual(0)
     expect(rsi).toBeLessThanOrEqual(100)
@@ -50,12 +50,14 @@ describe('BaseStrategy — indicadores técnicos', () => {
 
   test('calculateRSI devuelve null con menos de period+1 velas', () => {
     const candles = generateCandles(5, 100)
-    expect(strategy.calculateRSI(candles, 14)).toBeNull()
+    const closes = candles.map(c => c.close)
+    expect(strategy.calculateRSI(closes, 14)).toBeNull()
   })
 
   test('calculateBollingerBands retorna upper > middle > lower', () => {
     const candles = generateCandles(25, 100, 'oscillate')
-    const bb = strategy.calculateBollingerBands(candles, 20, 2)
+    const closes = candles.map(c => c.close)
+    const bb = strategy.calculateBollingerBands(closes, 20, 2)
     expect(bb).not.toBeNull()
     expect(bb.upper).toBeGreaterThan(bb.middle)
     expect(bb.middle).toBeGreaterThan(bb.lower)
@@ -63,7 +65,8 @@ describe('BaseStrategy — indicadores técnicos', () => {
 
   test('calculateMACD retorna macd, signal, histogram', () => {
     const candles = generateCandles(40, 100, 'up')
-    const macd = strategy.calculateMACD(candles, 12, 26, 9)
+    const closes = candles.map(c => c.close)
+    const macd = strategy.calculateMACD(closes, 12, 26, 9)
     expect(macd).not.toBeNull()
     expect(typeof macd.macd).toBe('number')
     expect(typeof macd.signal).toBe('number')
@@ -91,14 +94,14 @@ describe('MACrossoverStrategy', () => {
     const goldenCandles = generateCandles(15, 110, 'up')
     const candles = [...risingCandles, ...goldenCandles]
 
-    strategy.once('buy-signal', (data) => {
+    strategy.once('signal', (data) => {
       expect(data.direction).toBe('call')
       done()
     })
 
     // También puede no disparar si no hay cruce exacto — usamos timeout de fallback
     const timeout = setTimeout(() => done(), 200)
-    strategy.once('buy-signal', () => clearTimeout(timeout))
+    strategy.once('signal', () => clearTimeout(timeout))
 
     strategy.analyze(candles, candles[candles.length - 1].close)
   })
@@ -127,8 +130,8 @@ describe('RSIStrategy', () => {
   test('params por defecto correctos', () => {
     const p = new RSIStrategy().getDefaultParams()
     expect(p.period).toBe(14)
-    expect(p.oversold).toBe(30)
-    expect(p.overbought).toBe(70)
+    expect(p.oversoldLevel).toBe(30)
+    expect(p.overboughtLevel).toBe(70)
   })
 
   test('emite señal BUY cuando RSI sale de oversold', (done) => {
@@ -138,7 +141,7 @@ describe('RSIStrategy', () => {
     const candles = [...downCandles, ...recoveryCandles]
 
     let signalReceived = false
-    strategy.once('buy-signal', (data) => {
+    strategy.once('signal', (data) => {
       signalReceived = true
       expect(data.direction).toBe('call')
       done()
@@ -173,7 +176,7 @@ describe('BollingerBandsStrategy', () => {
     const allCandles = [...candles, lastCandle]
 
     let signalReceived = false
-    strategy.once('buy-signal', () => { signalReceived = true; done() })
+    strategy.once('signal', () => { signalReceived = true; done() })
     setTimeout(() => { if (!signalReceived) done() }, 300)
     strategy.analyze(allCandles, 79)
   })
