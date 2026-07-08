@@ -147,6 +147,7 @@ export const mlAPI = {
   train: (data) => api.post('/ml/train', data),
   getModels: () => api.get('/ml/models'),
   getStats: () => api.get('/ml/stats'),
+  getCandles: (asset, params) => api.get(`/ml/candles/${asset}`, { params }),
   unlock: (key) => api.post('/ml/unlock', null, { params: { key } })
 }
 

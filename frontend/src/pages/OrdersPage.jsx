@@ -1,29 +1,71 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Button, Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, FormControl, InputLabel, Select
+  MenuItem, FormControl, InputLabel, Select, Tooltip, Alert
 } from '@mui/material';
 import { Add, TrendingUp, TrendingDown, Close } from '@mui/icons-material';
-
-// Datos de ejemplo para órdenes abiertas
-const openPositions = [
-  { id: 'pos_123', asset: 'EUR/USD', direction: 'call', amount: 10, openQuote: 1.0854, currentPnl: 2.50 },
-  { id: 'pos_124', asset: 'GBP/JPY', direction: 'put', amount: 15, openQuote: 198.23, currentPnl: -5.75 },
-  { id: 'pos_125', asset: 'BTC/USD', direction: 'call', amount: 50, openQuote: 68123.45, currentPnl: 120.10 },
-];
+import { ordersAPI } from '../services/api';
+import { useBotStore } from '../store';
 
 export default function OrdersPage() {
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [orderForm, setOrderForm] = useState({
+    asset: 'EURUSD',
+    direction: 'call',
+    amount: 10,
+    expiration: 60
+  });
+  const { openPositions, setOpenPositions, removePosition, addToHistory } = useBotStore();
 
-  const handleClickOpen = () => {
-    setOpen(true);
+  useEffect(() => {
+    loadPositions();
+  }, []);
+
+  const loadPositions = async () => {
+    try {
+      const response = await ordersAPI.getOpenPositions();
+      if (response.success) {
+        setOpenPositions(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading positions:', err);
+    }
   };
 
-  const handleClose = () => {
-    setOpen(false);
+  const handleOpenOrder = async () => {
+    setLoading(true);
+    try {
+      const response = await ordersAPI.openOrder(orderForm);
+      if (response.success) {
+        setNotification({ type: 'success', message: 'Orden colocada exitosamente' });
+        setOpen(false);
+        loadPositions();
+      }
+    } catch (err) {
+      setNotification({ type: 'error', message: err.error || 'Error al colocar orden' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClosePosition = async (positionId) => {
+    try {
+      const response = await ordersAPI.closePosition(positionId);
+      if (response.success) {
+        removePosition(positionId);
+        if (response.data) {
+          addToHistory(response.data);
+        }
+        setNotification({ type: 'success', message: 'Posición cerrada' });
+      }
+    } catch (err) {
+      setNotification({ type: 'error', message: err.error || 'Error al cerrar posición' });
+    }
   };
 
   return (
@@ -35,11 +77,21 @@ export default function OrdersPage() {
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={handleClickOpen}
+          onClick={() => setOpen(true)}
         >
           Nueva Orden Manual
         </Button>
       </Box>
+
+      {notification && (
+        <Alert 
+          severity={notification.type}
+          onClose={() => setNotification(null)}
+          sx={{ mb: 2 }}
+        >
+          {notification.message}
+        </Alert>
+      )}
 
       {/* Tabla de Órdenes Abiertas */}
       <TableContainer component={Paper}>
@@ -79,7 +131,11 @@ export default function OrdersPage() {
                 </TableCell>
                 <TableCell align="center">
                   <Tooltip title="Cerrar Posición">
-                    <IconButton color="error" size="small">
+                    <IconButton 
+                      color="error" 
+                      size="small"
+                      onClick={() => handleClosePosition(pos.id)}
+                    >
                       <Close />
                     </IconButton>
                   </Tooltip>
@@ -96,29 +152,47 @@ export default function OrdersPage() {
       )}
 
       {/* Dialog para nueva orden */}
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold' }}>Nueva Orden Manual</DialogTitle>
         <DialogContent>
           <Box component="form" sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Activo</InputLabel>
-              <Select label="Activo" defaultValue="EUR/USD">
-                <MenuItem value="EUR/USD">EUR/USD</MenuItem>
-                <MenuItem value="GBP/JPY">GBP/JPY</MenuItem>
-                <MenuItem value="BTC/USD">BTC/USD</MenuItem>
+              <Select 
+                value={orderForm.asset}
+                label="Activo"
+                onChange={(e) => setOrderForm({...orderForm, asset: e.target.value})}
+              >
+                <MenuItem value="EURUSD">EUR/USD</MenuItem>
+                <MenuItem value="GBPUSD">GBP/USD</MenuItem>
+                <MenuItem value="BTCUSD">BTC/USD</MenuItem>
               </Select>
             </FormControl>
             <FormControl fullWidth>
               <InputLabel>Dirección</InputLabel>
-              <Select label="Dirección" defaultValue="call">
+              <Select 
+                value={orderForm.direction}
+                label="Dirección"
+                onChange={(e) => setOrderForm({...orderForm, direction: e.target.value})}
+              >
                 <MenuItem value="call">CALL (Sube)</MenuItem>
                 <MenuItem value="put">PUT (Baja)</MenuItem>
               </Select>
             </FormControl>
-            <TextField fullWidth label="Monto ($)" type="number" defaultValue="10" />
+            <TextField 
+              fullWidth 
+              label="Monto ($)" 
+              type="number" 
+              value={orderForm.amount}
+              onChange={(e) => setOrderForm({...orderForm, amount: parseFloat(e.target.value)})}
+            />
             <FormControl fullWidth>
               <InputLabel>Expiración</InputLabel>
-              <Select label="Expiración" defaultValue={60}>
+              <Select 
+                value={orderForm.expiration}
+                label="Expiración"
+                onChange={(e) => setOrderForm({...orderForm, expiration: e.target.value})}
+              >
                 <MenuItem value={60}>1 Minuto</MenuItem>
                 <MenuItem value={300}>5 Minutos</MenuItem>
                 <MenuItem value={900}>15 Minutos</MenuItem>
@@ -127,8 +201,14 @@ export default function OrdersPage() {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose}>Cancelar</Button>
-          <Button onClick={handleClose} variant="contained">Colocar Orden</Button>
+          <Button onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button 
+            onClick={handleOpenOrder} 
+            variant="contained"
+            disabled={loading}
+          >
+            {loading ? 'Colocando...' : 'Colocar Orden'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

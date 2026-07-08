@@ -5,19 +5,7 @@ import {
   Chip, ButtonGroup, Switch, FormControlLabel
 } from '@mui/material';
 import { Delete, Download } from '@mui/icons-material';
-
-// Datos de ejemplo para los logs
-const mockLogs = [
-  { level: 'info', category: 'SYSTEM', message: 'Bot iniciado correctamente.' },
-  { level: 'info', category: 'CONNECTION', message: 'Conectado a la API de IQ Option.' },
-  { level: 'success', category: 'STRATEGY', message: 'Estrategia "MACD Crossover" iniciada para EUR/USD.' },
-  { level: 'info', category: 'ORDER', message: 'Abriendo orden CALL para EUR/USD por $10.' },
-  { level: 'warn', category: 'RISK_MGMT', message: 'El activo GBP/JPY tiene una volatilidad alta.' },
-  { level: 'success', category: 'ORDER', message: 'Orden #123 cerrada con ganancia de $8.70.' },
-  { level: 'info', category: 'ORDER', message: 'Abriendo orden PUT para GBP/JPY por $15.' },
-  { level: 'error', category: 'ORDER', message: 'Fallo al cerrar la orden #124: Tiempo de expiración no alcanzado.' },
-  { level: 'success', category: 'ORDER', message: 'Orden #125 cerrada con pérdida de -$15.00.' },
-];
+import { useBotStore } from '../store';
 
 const getLogLevelColor = (level) => {
   switch (level) {
@@ -33,32 +21,32 @@ const getLogLevelColor = (level) => {
 const LogLine = ({ log }) => (
     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: '70px' }}>
-            {new Date().toLocaleTimeString()}
+            {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()}
         </Typography>
         <Chip
-            label={log.level.toUpperCase()}
+            label={(log.level || 'info').toUpperCase()}
             size="small"
             sx={{
-                bgcolor: getLogLevelColor(log.level),
+                bgcolor: getLogLevelColor(log.level || 'info'),
                 color: '#fff',
                 width: '70px'
             }}
         />
         <Typography variant="body2" sx={{ fontFamily: 'monospace', flex: 1 }}>
-            [{log.category}] {log.message}
+            [{log.category || 'SYSTEM'}] {log.message || log.msg || ''}
         </Typography>
     </Box>
 );
 
 export default function LogsPage() {
     const logContainerRef = useRef(null);
+    const { logs, clearLogs } = useBotStore();
 
     useEffect(() => {
-        // Auto-scroll al final
         if (logContainerRef.current) {
             logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
         }
-    }, [mockLogs]);
+    }, [logs]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -100,11 +88,8 @@ export default function LogsPage() {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {mockLogs.map((log, index) => (
-                <LogLine key={index} log={log} />
-            ))}
-             {mockLogs.map((log, index) => (
-                <LogLine key={index+100} log={log} />
+            {(logs.length > 0 ? logs : []).map((log, index) => (
+                <LogLine key={log.id || index} log={log} />
             ))}
         </Box>
       </Paper>

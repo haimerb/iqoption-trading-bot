@@ -53,7 +53,19 @@ export default function MLPage() {
     setLoading(true);
     setError(null);
     try {
+      const candlesRes = await mlAPI.getCandles(config.selectedAsset, {
+        timeframe: config.selectedTimeframe,
+        count: 30
+      });
+      const candles = candlesRes.success ? candlesRes.data?.candles : [];
+
+      if (!candles || candles.length < 20) {
+        setError('No hay suficientes velas para predecir. Necesitas al menos 20.');
+        return;
+      }
+
       const response = await mlAPI.predict({
+        candles,
         asset: config.selectedAsset,
         timeframe: config.selectedTimeframe
       });

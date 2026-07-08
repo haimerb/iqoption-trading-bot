@@ -1,26 +1,36 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Button, Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, TablePagination,
   Grid, TextField, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import { TrendingUp, TrendingDown } from '@mui/icons-material';
-
-// Datos de ejemplo para el historial
-const historyData = Array.from({ length: 100 }, (_, i) => ({
-  id: `trade_${12345 + i}`,
-  closeDate: new Date(Date.now() - i * 3600000).toISOString(),
-  asset: ['EUR/USD', 'GBP/JPY', 'BTC/USD', 'ETH/USD'][i % 4],
-  direction: i % 3 === 0 ? 'put' : 'call',
-  amount: 10 + (i % 10),
-  result: (Math.random() - 0.4) * (10 + (i % 10)),
-  strategy: ['MACD Crossover', 'RSI Over-Under', 'Momentum Scalp'][i % 3]
-}));
+import { historyAPI } from '../services/api';
 
 export default function HistoryPage() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [historyData, setHistoryData] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    setLoading(true);
+    try {
+      const response = await historyAPI.getHistory({ limit: 500 });
+      if (response.success) {
+        setHistoryData(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading history:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
