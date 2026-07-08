@@ -10,6 +10,7 @@ import {
   Dashboard, Insights, ShoppingCart, History, BugReport,
   Settings, Logout, AccountBalanceWallet, SignalCellularAlt, SignalCellularOff, Psychology
 } from '@mui/icons-material';
+import { useAuthStore, useBotStore } from '../../store';
 
 const drawerWidth = 240;
 
@@ -56,11 +57,11 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mock data - reemplazar con el estado real de la aplicación
-  const isConnected = true;
-  const userEmail = "user@example.com";
-  const accountBalance = "10,523.50";
-  const accountCurrency = "USD";
+  const { user, logout: authLogout } = useAuthStore();
+  const { isConnected, iqBalance, iqCurrency } = useBotStore();
+  const userEmail = user?.email || 'user@example.com';
+  const accountBalance = iqBalance ? iqBalance.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '0.00';
+  const accountCurrency = iqCurrency || 'USD';
 
   const handleOpenUserMenu = (event) => {
     setAnchorElUser(event.currentTarget);
@@ -72,9 +73,8 @@ export default function MainLayout() {
   
   const handleLogout = () => {
     handleCloseUserMenu();
-    // Lógica de logout aquí
-    console.log("Cerrando sesión...");
-    navigate('/login'); // Simula redirección a login
+    authLogout();
+    navigate('/login');
   };
 
   const getTitle = () => {

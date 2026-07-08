@@ -1,9 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box, Button, Typography, Grid, Card, CardContent, CardActions,
-  TextField, Switch, FormControlLabel, Divider, CardHeader
+  TextField, Switch, FormControlLabel, Divider, CardHeader, Alert
 } from '@mui/material';
+import { accountAPI } from '../services/api';
 
 const SettingsSection = ({ title, subtitle, children, actions }) => (
     <Card>
@@ -27,37 +28,53 @@ const SettingsSection = ({ title, subtitle, children, actions }) => (
 );
 
 export default function SettingsPage() {
+  const [riskConfig, setRiskConfig] = useState({
+    maxDailyLoss: 100,
+    maxOrderAmount: 50,
+    maxConsecutiveLosses: 5,
+    cooldownAfterLoss: 60
+  });
+  const [notification, setNotification] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveRiskConfig = async () => {
+    setSaving(true);
+    setNotification(null);
+    try {
+      const response = await accountAPI.updateRiskConfig(riskConfig);
+      if (response.success) {
+        setNotification({ type: 'success', message: 'Configuración de riesgo guardada' });
+      }
+    } catch (err) {
+      setNotification({ type: 'error', message: err.error || 'Error al guardar' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Box>
       <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 4 }}>
         Ajustes
       </Typography>
 
-      <Grid container spacing={3}>
-        {/* Conexión IQ Option */}
-        <Grid item xs={12}>
-          <SettingsSection
-            title="Conexión a IQ Option"
-            subtitle="Credenciales para acceder a la API"
-            actions={<Button variant="contained">Guardar Credenciales</Button>}
-          >
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth label="Email" defaultValue="user@example.com" />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth label="Contraseña" type="password" defaultValue="a-secret-password" />
-              </Grid>
-            </Grid>
-          </SettingsSection>
-        </Grid>
+      {notification && (
+        <Alert severity={notification.type} onClose={() => setNotification(null)} sx={{ mb: 2 }}>
+          {notification.message}
+        </Alert>
+      )}
 
+      <Grid container spacing={3}>
         {/* Gestión de Riesgo */}
         <Grid item xs={12}>
           <SettingsSection
             title="Gestión de Riesgo"
             subtitle="Límites para proteger tu cuenta"
-            actions={<Button variant="contained">Guardar Ajustes de Riesgo</Button>}
+            actions={
+              <Button variant="contained" onClick={handleSaveRiskConfig} disabled={saving}>
+                {saving ? 'Guardando...' : 'Guardar Ajustes de Riesgo'}
+              </Button>
+            }
           >
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
@@ -65,7 +82,8 @@ export default function SettingsPage() {
                   fullWidth
                   label="Pérdida Máxima Diaria ($)"
                   type="number"
-                  defaultValue="100"
+                  value={riskConfig.maxDailyLoss}
+                  onChange={(e) => setRiskConfig({...riskConfig, maxDailyLoss: parseFloat(e.target.value)})}
                   helperText="El bot se detendrá si la pérdida diaria alcanza este valor."
                 />
               </Grid>
@@ -74,7 +92,8 @@ export default function SettingsPage() {
                   fullWidth
                   label="Monto Máximo por Orden ($)"
                   type="number"
-                  defaultValue="50"
+                  value={riskConfig.maxOrderAmount}
+                  onChange={(e) => setRiskConfig({...riskConfig, maxOrderAmount: parseFloat(e.target.value)})}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -82,31 +101,21 @@ export default function SettingsPage() {
                   fullWidth
                   label="Máximo de Pérdidas Consecutivas"
                   type="number"
-                  defaultValue="5"
+                  value={riskConfig.maxConsecutiveLosses}
+                  onChange={(e) => setRiskConfig({...riskConfig, maxConsecutiveLosses: parseInt(e.target.value)})}
                   helperText="Pausa temporal tras N pérdidas seguidas."
                 />
               </Grid>
-                 <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
                   label="Cooldown tras Pérdida (segundos)"
                   type="number"
-                  defaultValue="60"
+                  value={riskConfig.cooldownAfterLoss}
+                  onChange={(e) => setRiskConfig({...riskConfig, cooldownAfterLoss: parseInt(e.target.value)})}
                 />
               </Grid>
             </Grid>
-          </SettingsSection>
-        </Grid>
-
-        {/* Ajustes de Interfaz */}
-        <Grid item xs={12}>
-          <SettingsSection
-            title="Ajustes de Interfaz"
-          >
-            <FormControlLabel
-              control={<Switch defaultChecked />}
-              label="Modo Oscuro"
-            />
           </SettingsSection>
         </Grid>
       </Grid>
